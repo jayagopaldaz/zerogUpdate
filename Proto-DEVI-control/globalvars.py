@@ -1,5 +1,15 @@
-﻿import time
+﻿#=============================================================================================================================================================#
+
+mypi='control'
+myname="globalvars.py"
+version="v.a.1.00"
+abspath='/home/pi/Desktop/'
+
+#=============================================================================================================================================================#
 import printer
+import time
+
+printer.hello(myname,version)
 
 alive=True
 t_offset=0
@@ -18,7 +28,7 @@ PHASE_PHI    = 6
 PHASE_UV     = 70
 PHASE_H2O2   = 800
 PHASE_SHUTOFF= -2
-phase=PHASE_NONE
+phase=-3
 
 fade=1
 max_vol=.65

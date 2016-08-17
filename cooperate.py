@@ -1,16 +1,14 @@
 #=============================================================================================================================================================#
 
+mypi='shared'
 myname="cooperate.py"
-version="v3.21 "
-version="v3.22 #NONONONONONO "
+version="v.a.1.00"
+abspath='/home/pi/Desktop/'
 
 #=============================================================================================================================================================#
-import sys
-abspath='/home/pi/Desktop/'
-sys.path.insert(0, abspath)
 import printer
-printer.hello(myname,version)
 
+printer.hello(myname,version)
 ip=printer.ip
 
 try:

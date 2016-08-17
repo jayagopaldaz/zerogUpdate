@@ -1,22 +1,23 @@
 #=============================================================================================================================================================#
 
+mypi='gui'
 myname="loader.py"
-version="v5.01"
+version="v.a.1.00"
+abspath='/home/pi/Desktop/'
 
 #=============================================================================================================================================================#
-#exit(0)
 import time
 from threading import Thread
 from subprocess import call
+
 def c():
     while True:
-        call(['python3','/home/pi/Desktop/cooperate.py'])
+        call(['python3',abspath+'cooperate.py'])
         time.sleep(5)
 def z():    
     while True:
-        call(['idle3',"-r",'/home/pi/Desktop/zerog.py'])
+        call(['python3',abspath+'zerog.py'])
         time.sleep(5)
-    
         
 Thread(target = c).start()
 Thread(target = z).start()

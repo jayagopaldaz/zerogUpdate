@@ -1,22 +1,21 @@
-6#=============================================================================================================================================================#
+#=============================================================================================================================================================#
 
+mypi='control'
 myname="LED.py"
-version="v1.01"
+version="v.a.1.00"
 abspath='/home/pi/Desktop/'
 
 #=============================================================================================================================================================#
-import sys
-sys.path.insert(0, abspath)
 import printer
-printer.hello(myname,version)
-#printer.silent=True
-
+import json
 import time
 import math
 import _rpi_ws281x as ws
 import random
 import RPi.GPIO as GPIO
 from threading import Thread
+
+printer.hello(myname,version)
 
 b=10
 lum=0
@@ -28,30 +27,41 @@ luma=0
 f=1
 alive=True
 OOO="       "
-r_cv=1
-g_cv=.7
-b_cv=1
-w_cv=1
+
+r_cv_t_default=1
+g_cv_t_default=.7
+b_cv_t_default=1
+w_cv_t_default=1
+r_cv_t=g_cv_t=b_cv_t=w_cv_t=0
+r_cv=g_cv=b_cv=w_cv=0
+
 
 def getupdates():
     global plum,tlum,vel,alive,timer
+    global r_cv_t,g_cv_t,b_cv_t,w_cv_t
     while alive:
-        tlum_s = printer.fin('targ_lum')
-        vel_s  = printer.fin('targ_lum_vel')
-        timer_s= printer.fin('targ_lum_time')
-
+        try:
+            colvals_=printer.fin('colvals').replace("'",'"')
+            cv=json.loads(colvals_)
+            r_cv_t=float(cv['colval_r'])
+            g_cv_t=float(cv['colval_g'])
+            b_cv_t=float(cv['colval_b'])
+            w_cv_t=float(cv['colval_w'])
+        except: print('colval exception')
+        try:
+            tlum_s = printer.fin('targ_lum')
+            vel_s  = printer.fin('targ_lum_vel')            
+        except: print('l/v exception')
+        
         if   tlum_s=='alert': alert=True
         elif tlum_s=='safe' : alert=False
         elif tlum_s=="end"  : alive=False
         else:
             try: tlum=float(tlum_s)                     
-            except: printer.p('tlum float exception')                    
+            except: print('tlum float exception')                    
                 
         try: vel=float(vel_s)
-        except: printer.p('vel float exception')
-
-        try: timer=float(timer_s)
-        except: printer.p('timer float exception')
+        except: print('vel float exception')
 
         time.sleep(.25)
                 
@@ -59,14 +69,14 @@ GPIO.setwarnings(False)
 GPIO.setmode(GPIO.BOARD)
 GPIO.setup(21,GPIO.OUT)
 pwm=GPIO.PWM(21,30)
-pwm.start(10) #9 to 100
+#pwm.start(10) #9 to 100
 
 # LED configuration.
 LED_CHANNEL    = 0
 LED_COUNT      = 64         # How many LEDs to light.
 LED_FREQ_HZ    = 800000     # Frequency of the LED signal.  Should be 800khz or 400khz.
 LED_DMA_NUM    = 5          # DMA channel to use, can be 0-14.
-LED_GPIO       = 18         # GPIO connected to the LED signal line.  Must support PWM!
+LED_GPIO       = 18 #(12)   # GPIO connected to the LED signal line.  Must support PWM!
 LED_BRIGHTNESS = 255        # Set to 0 for darkest and 255 for brightest
 LED_INVERT     = 0          # Set to 1 to invert the LED signal, good if using NPN
 
@@ -98,19 +108,18 @@ def byteclamp(n):
     if n>255: n=255
     return n
 
-def wave(y,a,m,wl,f):
-    if alert: return luma*(.1+2*a*math.sin(m/wl+time.time()*f*2))        
-    else:     return luma*(y+a*math.sin(m/wl+time.time()*f))
-    
-def lumar(l): return wave(.95,.05,l,.200,800000)    
-def lumag(l): return wave(.95,.05,l,.200,800000)
-def lumab(l): return wave(.95,.05,l,.200,800000)
-def lumaw(l): return wave(.95,.05,l,.200,800000)              
+def wave(y,a,m,wl,f): return luma*(y+a*math.sin(m/wl+time.time()*f))
 
-def rcol(k): return byteclamp(r_cv*8  *lumar(k)+.25*math.sin(k/20+time.time()*8000000)-1)
-def gcol(k): return byteclamp(g_cv*16 *lumag(k)+.25*math.sin(k/20+time.time()*8000000)-1)
-def bcol(k): return byteclamp(w_cv*254*lumab(k)+luma*.25+.25*math.sin(k/20+time.time()))+f
-def wcol(k): return byteclamp(b_cv*255*lumaw(k)+.25*math.sin(k/20+time.time()*8000000)-2)
+def pwm_shimmer():
+    if int(b*1)<1: return 0
+    elif b<pwmCap: return random.random()<b/pwmCap
+    else: return 1
+
+def shimmer(r): return random.random()<(luma*r - int(luma*r))
+def rcol(k): return byteclamp(r_cv*8  *luma+shimmer(8)-1)
+def gcol(k): return byteclamp(g_cv*16 *luma+shimmer(16)-1)
+def bcol(k): return byteclamp(b_cv*254*luma+pwm_shimmer())
+def wcol(k): return byteclamp(w_cv*255*luma+shimmer(255)-2)
 
 def col(j):
     if j%4==0: return gcol(j+0)*65536+rcol(j+0)*256+bcol(j+0)
@@ -122,11 +131,12 @@ def col(j):
 ######################
 thresh=.5
 thresh_hi=.25
-pwmCap=9
+pwmCap=0
 poly=6
 polyb=3
-plum=0
+plumx=0
 tlum=0
+lum=0
 #printer.fout('targ_lum_time',str(time.time()+5))
 #printer.fout('targ_lum_vel', '10')
 #printer.fout('targ_lum', '0')
@@ -142,71 +152,92 @@ def getlumb(x):
     x_lo=x/thresh
     x_hi=(x-thresh_hi)/(1-thresh_hi)
     
-    if x<thresh: y2=pwmCap+(100-pwmCap)*x_lo**polyb
+    if x<thresh: y2=100*x_lo**polyb
     else: y2=100
-    
-    if x>thresh_hi: y1=100*x_hi**poly
-    elif x>0: y1=.001
+    if x>thresh_hi: y1=100*x_hi**poly    
     else: y1=0
 
-    if y1<0: y1=0
-    if y1>100: y1=100    
-    if y2<pwmCap: y2=pwmCap
-    if y2>99:     y2=100    
+    if y1<0:  y1=0
+    if y1>99: y1=100    
+    if y2<0:  y2=0
+    if y2>99: y2=100    
         
     return (y1,y2)
 
 #curve_pos = progress as el from the previous lum to the current lum
 #return x from 0 to 1
-def get_x_from_y(y):
-    for x in range(0,100):
-        if getlumb(x/100)[0]>y: return x/100
+def get_x_from_lum(L):
+    for x in range(1,100):
+        if getlumb(x/100)[0]>=L: return (x-1)/100
+    return 1
+
+def get_x_from_b(B):
+    for x in range(1,100):
+        if getlumb(x/100)[1]>=B: return (x-1)/100
     return 1
     
 def get_curve_pos(prog):
-    xlum1=plum/100
-    xlum2=tlum/100
-    return xlum1+(xlum2-xlum1)*prog
+    return (plumx+(tlumx-plumx)*prog)
 
-try:
-#for asdf in range(0,1):
-    tlum_=tlum=plum=0
-    while alive:
-        if tlum_!=tlum:
-            plum=tlum_
-            tlum_=tlum
+def report():
+    #printer.p(OOO+"LED === lum:"+str(lum)+" | b:"+str(b))
+    msg=''
+    msg+=(str(int(time.time()-timer)))
+    msg+=(", lum: "+str(int(100*lum)))+"/10000"
+    msg+=(", vel: "+str(vel))
+    msg+=(", tlum: "+str(tlum))
+    #msg+=(", plumx: "+str(int(100*plumx)))
+    msg+=(", b: "+str(int(1*b)))        
+    msg+=(", rgbw: "+str( (int(100*r_cv),int(100*g_cv),int(100*b_cv),int(100*w_cv)) ) )        
+    msg+=(", rgbwt: "+str( (int(100*r_cv_t),int(100*g_cv_t),int(100*b_cv_t),int(100*w_cv_t)) ) )        
+    #msg+=(", crv: "+str(int(100*get_curve_pos(el))))
+    #msg+=(", el: "+str(int(100*el)))        
+    print(msg)
 
-        if time.time()>lastlog+1:
-            lastlog=time.time()
-            printer.p(OOO+"LED === lum:"+str(lum)+" | b:"+str(b))
-            print("time: "+str(int(time.time()-timer)))
-            #print("lum : "+str(lum))
-            #print("vel : "+str(vel))
-            print("tlum: "+str(tlum))
-            print("plum: "+str(plum))
-            #print("b   : "+str(int(b)))
-            print("----------------------------------")
-            #print(str(getlumb(get_curve_pos(el))))
-            #print(str(get_curve_pos(el)))
-        ob=int(b)
-
-        el=(time.time()-timer)/vel
-        if el>1: el=1
-        if el<0: el=0
-        (lum,b)=getlumb(get_curve_pos(el))
-
-        if el==1: plum=tlum
-        if int(b)!=ob: pwm.ChangeDutyCycle(int(b))            
-        luma=lum/100
+tlum_=tlum=tlumx=plumx=0
+pwm.start(pwmCap) #9 to 100
+while alive:
+    if lum<100:
+        r_cv_t=r_cv_t_default
+        g_cv_t=g_cv_t_default
+        b_cv_t=b_cv_t_default
+        w_cv_t=w_cv_t_default
         
-        if lum==0: f=0
-        else: f=1
-        
-        for i in range(LED_COUNT): ws.ws2811_led_set(ws.ws2811_channel_get(leds,0),i,col(i))
-        ws.ws2811_render(leds)        
-        
-except: printer.p(OOO+"LED === SOME KIND OF EXCEPTION!!!")
-            
+    vv=.01/vel/(1+(tlum<lum))
+    r_cv=(1-vv)*r_cv+vv*r_cv_t
+    g_cv=(1-vv)*g_cv+vv*g_cv_t
+    b_cv=(1-vv)*b_cv+vv*b_cv_t
+    w_cv=(1-vv)*w_cv+vv*w_cv_t
+    
+    if tlum_!=tlum:
+        tlumx=get_x_from_lum(tlum)
+        plumx=get_x_from_lum(lum)        
+        plumxB=get_x_from_b(b)
+        if plumxB<plumx and b<100: plumx=plumxB
+        tlum_=tlum
+        timer=time.time()
+
+    el=(time.time()-timer)/vel
+    if el>1: el=1
+    if el<0: el=0
+
+    #ob=int(1*b)        
+    ob=b        
+    (lum,b)=getlumb(get_curve_pos(el))
+    b=1
+    if b!=ob and b>=pwmCap: pwm.ChangeDutyCycle(b) 
+    luma=lum/100
+    
+    #if lum==0: f=0
+    #else: f=1
+    
+    for i in range(LED_COUNT): ws.ws2811_led_set(ws.ws2811_channel_get(leds,0),i,col(i))
+    ws.ws2811_render(leds)        
+     
+    if time.time()>lastlog+1.5:
+        lastlog=time.time()
+        report()
+     
 printer.p(OOO+"LED === checking out...")    
 for i in range(61): ws.ws2811_led_set(ws.ws2811_channel_get(leds,0),i,0x000000)
 ws.ws2811_render(leds)

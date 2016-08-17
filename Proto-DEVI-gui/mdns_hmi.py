@@ -1,18 +1,18 @@
 # -*- coding: utf-8 -*-
 #=============================================================================================================================================================#
 
+mypi='gui'
 myname="mdns_hmi.py"
-version="v1.00"
+version="v.a.1.00"
 abspath='/home/pi/Desktop/'
 
 #=============================================================================================================================================================#
-import sys
-sys.path.insert(0, abspath)
 import printer
 import netifaces as ni
 import time
 import socket
 from zeroconf import ServiceBrowser, ServiceInfo, Zeroconf
+
 printer.hello(myname,version)
 
 ip=''

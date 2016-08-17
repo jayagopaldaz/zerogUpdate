@@ -1,7 +1,9 @@
 #=============================================================================================================================================================#
 
+mypi='shared'
 myname="printer.py"
-version="v4.04"
+version="v.a.1.00"
+abspath='/home/pi/Desktop/'
 
 #=============================================================================================================================================================#
 import requests
@@ -9,14 +11,8 @@ import datetime
 import time
 from threading import Thread
 
-abspath='/home/pi/Desktop/'
-silent=False
-
 ip="72.182.78.244"
 #ip="canopy-os.com"
-
-#try: logf=open(abspath+'log.txt','w')
-#except: pass
 
 myID="_"
 
@@ -24,8 +20,7 @@ try:
     f=open(abspath+'myID','r')
     myID=f.readline().strip()
     f.close()        
-except:
-    pass
+except: pass
 
 def helloThread(fn,v):
     st = str(datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'))
@@ -39,7 +34,14 @@ def helloThread(fn,v):
 
 def pThread(s):
     #print(s)
+    
     if silent: return 0
+    #t=str(time.time())
+    #fs=t[-6]+"   :("+s+"):\r\n"
+    #try: logf.write(fs)
+    #except: pass
+    
+    #if len(s)>2048: s=s[0:2048]
     try: r=requests.post('http://'+ip+'/zerog/getgui.php', params={"mode":"print","s":myID+"> "+s})
     except: pass
 
@@ -70,7 +72,7 @@ def foutThread(fn,dat):
         f=open(abspath+'var/'+fn,'w')
         f.write(dat)
         f.close()
-        #p("wrote "+fn+" to /var: "+dat)
+        p("wrote "+fn+" to /var: "+dat)
     except:
         pass
 
@@ -79,7 +81,7 @@ def fin(fn):
         f=open(abspath+'var/'+fn,'r')
         dat=f.read()
         f.close()
-        #p("read "+fn+" from /var: "+dat)
+        p("read "+fn+" from /var: "+dat)
         return dat
     except:
         return False
