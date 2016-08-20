@@ -8,30 +8,37 @@ abspath='/home/pi/Desktop/'
 
 #=============================================================================================================================================================#
 import socket
+import time
 
 HOST = ''
 PORT = 9876
-ADDR = (HOST,PORT)
 BUFSIZE = 4096
+ADDR = (HOST,PORT)
 
+ready=False
 serv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-try: serv.bind(ADDR)
-except: pass
-serv.listen(5)
+while not ready:
+    try: 
+        serv.bind(ADDR)
+        serv.listen(5)
+        ready=True
+    except: 
+        print('no server bind')
+        time.sleep(1)
 
 data=''
 def init():
     global data
-    print('listening ...')
+    print('hmi listening ...')
     while True:
         conn, addr = serv.accept()
-        print('client connected ... '+str(addr))
+        print('control client connected ... '+str(addr))
         while True:
             dataB = conn.recv(BUFSIZE)
             if not dataB: break
             data=dataB.decode('utf-8')
-            #print(data)
+            if "fthermo" not in data: print("hmi server recvd: " +data)
         conn.close()
-        print('client disconnected')
+        print('control client disconnected')
 
 if __name__=='__main__': init()
