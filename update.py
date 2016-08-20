@@ -14,7 +14,7 @@ f=open(abspath+'myID','r')
 myID=f.readline().strip()
 f.close()        
 
-baseURL=' https://github.com/jayagopaldaz/zerogUpdate/tree/master/'
+baseURL=' https://raw.githubusercontent.com/jayagopaldaz/zerogUpdate/master/'
 
 if myID[-7:]=='control': piURL='Proto-DEVI-control/'
 if myID[-3:]=='gui':     piURL='Proto-DEVI-gui/'
