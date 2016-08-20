@@ -16,14 +16,9 @@ f.close()
 
 baseURL=' https://raw.githubusercontent.com/jayagopaldaz/zerogUpdate/master/'
 
-if myID[-7:]=='control': piURL='Proto-DEVI-control/'
-if myID[-3:]=='gui':     piURL='Proto-DEVI-gui/'
-
-def get(ar,i1,i2):
+def get(pi,ar,i1,i2):
     if i2==ALL: i2=len(ar)
-    for i in range(i1,i2):
-        #os.system('wget -O '+abspath+ar[i]+baseURL+piURL+ar[i])
-        print('wget -O '+abspath+ar[i]+baseURL+piURL+ar[i])
+    for i in range(i1,i2): os.system('wget -O '+abspath+ar[i]+baseURL+pi+ar[i])
 
 shared_urls = [
     'cooperate.py',
@@ -79,4 +74,6 @@ guiassets_settings_urls = [
     'guiassets/settings/volume.png'
     ]
     
-get(control_urls,0,ALL)
+get('',shared_urls,0,ALL)
+if myID[-7:]=='control': get('Proto-DEVI-control/',control_urls,0,ALL)
+if myID[-3:]=='gui':     get('Proto-DEVI-gui/',control_urls,0,ALL)
