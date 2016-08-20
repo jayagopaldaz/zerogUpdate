@@ -15,23 +15,23 @@ import pygame
 import json
 from pygame.locals import *
 from threading import Thread
-
 import server_hmi as server
 import client_hmi as client
+
+printer.hello(myname,version)
 
 def socketboot():
     import mdns_hmi as mdns
     control_ip= (mdns.info.properties[b'eth0']).decode('utf-8')
-    print("zerog control's ip: "+control_ip)
+    my_ip=mdns.ip
+    print("control's ip: "+control_ip)
     client.HOST=control_ip
+    while not server.ready: continue
     Thread(target=server.init).start()
     Thread(target=client.init).start()
 
-Thread(target=socketboot).start()
-
-#printer.silent=True
-printer.hello(myname,version)
-
+#Thread(target=socketboot).start()
+socketboot()
 
 pygame.init()
 pygame.display.init()
@@ -39,16 +39,12 @@ pygame.display.set_caption("Float Control "+version)
 pygame.mouse.set_visible(0)
 pygame.font.init()
 
-#clock = pygame.time.Clock()
-#FRAMES_PER_SECOND = 0
-#deltat = clock.tick(FRAMES_PER_SECOND)
 screen=pygame.display.set_mode((800, 480), NOFRAME|RLEACCEL)
 stage=pygame.Surface((800,480))
 
 #================================ SOME GLOBAL VARIABLES ================================                
 debugstring=''
 t_offset=0
-fthermo=0
 max_vol=.65
 ct=78.1
 old_cur_temp=0
@@ -73,6 +69,7 @@ stepperSpeed=0
 fade=1
 prog=0
 lastPrint=0
+lastsend=0
 floatelapsed=0
 status_str="READY"
 phase=-1
@@ -81,6 +78,9 @@ lightMode=True
 alertMode=False
 timeleft_str="READY"
 sleepMode=False
+try: colvals=json.loads(printer.fin('colvals'))
+except: colvals={"colval_r":1.0,"colval_g":0.7,"colval_b":1.0,"colval_w":1.0}
+print("this is .fin colvals:"+str(colvals))
 
 PHASE_NONE   = -1
 PHASE_SHOWER = 0
@@ -334,7 +334,7 @@ def tankname():
     global floatelapsed
     global timeleft_str
     global levels_button
-    global tname
+    global tname,debugstring
 
     tn=tname
     if printer.myID=='Harmony-DEVI': tn="HARMONY"
@@ -381,13 +381,14 @@ def tankname():
     fps=fps*.99+fps1*.01
     fpst=time.time()
     if not floatInProgress: timeleft_str = "READY"    
-    #if lightMode: print(str(lightMode))
-    if alertMode or lightMode:        
+    if alertMode or (lightMode and not sleepMode):
         timeleft_str+=" - "
         if alertMode: timeleft_str+="ALERT"
-        elif lightMode: timeleft_str+="LIGHT ON"
-    thermoString=str(int(10*(cur_temp+t_offset))/10)+" °F"
-
+        elif lightMode or sleepMode: timeleft_str+="LIGHT ON"
+    #debugstring=str(lightMode)+"<LM|SM>"+str(sleepMode)
+    try: thermoString=str(int(10*(cur_temp+t_offset))/10)+" °F"
+    except: thermoString="-"
+    
     timeleft = default_font.render(timeleft_str,1,(140,140,128))
     timeelapsed = default_font.render(str(math.floor(floatelapsed/60))+"min",1,(140,140,128))
     temperature = default_font.render(str(thermoString),1,(140,140,128))
@@ -430,22 +431,27 @@ def trendgraph():
     pygame.draw.line(stage, (112,128,232), (100,150),(100,400), 2)
     pygame.draw.line(stage, (112,128,232), (100,400),(700,400), 2)
     pygame.draw.line(stage, (112,128,232), (700,150),(700,400), 2)
-    w=700-100-4
-    h=400-150-4
+    w=700-100-3
+    h=400-150-3
     graph = pygame.Surface((w,h))
     graph.fill((25,25,25))
     y2=0
     
-    for x in range(0,w-1):
+    pygame.draw.line(graph, (56,94,116), (0,100),(600,100), 1)
+    for x in range(-2,w-1):
         y1=y2
-        pygame.draw.line(graph, (212,228,232), (x,h-y1),(x+1,h-y2), 2)
-        y2=150+math.sin(x/100+time.time())*50-25*math.cos(x/50)-x/10
+        xt=x+time.time()*10
+        y2=10*math.sin(xt/100)-5*math.cos(xt/50)#-xt/50
+        pygame.draw.line(graph, (212,228,232), (x,100+y1),(x+1,100+y2), 2)
       
+    
     stage.blit(graph,(102,152))
-    more1=status_font.render("Trends will become available",1,(28,103,124))
-    more2=status_font.render("after more data has been logged :)",1,(28,103,124))
+    more1=status_font.render("TEMPERATURE",1,(128,203,224))
+    more2=default_font.render("pH  |  ORP  |  SPEC.GRAV.  |  SALT",1,(28,103,124))
+    targ=default_font.render("93.5 °F",1,(28,103,124))
     stage.blit(more1, (400-more1.get_rect().width/2, 50))
     stage.blit(more2, (400-more2.get_rect().width/2, 90))
+    stage.blit(targ, (710, 250))
 
 #-----------------------------------------------------------------
 def timey(t):
@@ -593,29 +599,48 @@ def drawgradbar():
     progbar     = pygame.Surface((w,h))
     progbar.fill((22,27,33))
     progbar.set_alpha(math.floor(255*.7)) # 70% white prog bar... remember ;) ?
-    #gradsurface.set_alpha(math.floor(.65*255)) # 65% grad bar... remember ;) ?
+
+    c_r=colvals['colval_r']
+    c_g=colvals['colval_g']
+    c_b=colvals['colval_b']
+
     for x in range(0,799):
-        #try:
-        if True:
-            #THE GRADIENT
-            if x<_shower:                                                  _r=_g=_b=255#math.floor(255-    (x         )   /_shower*255)
-            if x>_shower and x<_shower+_fade1:                             _r=_g=_b=   math.floor(255-   (x-_shower     )    /_fade1*255)
-            if x>_shower+_fade1 and x<_shower+_fade1+_float:               _r=_g=_b=0#math.floor(255-  (x-_shower-_fade1   )     /_float*255)
-            if x>_shower+_fade1+_float and x<_shower+_fade1+_float+_fade2: _r=_g=_b= math.floor( 0 + (x-_shower-_fade1-_float)      /_fade2*255)
-            if x>_shower+_fade1+_float+_fade2+_wait:      
-                _r= math.floor(255-(x-_shower-(_fade1+_fade2)-_float  ) /_filter*255 *4)
-                _g= math.floor(255-(x-_shower-(_fade1+_fade2)-_float  ) /_filter*255 *3)
-                _b= math.floor(255-(x-_shower-(_fade1+_fade2)-_float  ) /_filter*255 *2)
-                if _r<0: _r=0
-                if _g<0: _g=0
-                if _b<0: _b=0
-                _r+=math.floor( 0 +(x-_shower-(_fade1+_fade2)-_float  ) / _filter*255)
-                _b+=math.floor( 0 +(x-_shower-(_fade1+_fade2)-_float  ) / _filter*255)
-                if _r>255: _r=255
-                if _g>255: _g=255
-                if _b>255: _b=255
-                
-            pygame.draw.line(gradsurface, (_r,_g,_b), (x,0),(x,h), 1)
+        #THE GRADIENT
+        if x<_shower:                                                  _r=_g=_b=255#math.floor(255-    (x         )   /_shower*255)
+        if x>_shower and x<_shower+_fade1:                             _r=_g=_b=   math.floor(255-   (x-_shower     )    /_fade1*255)
+        if x>_shower+_fade1 and x<_shower+_fade1+_float:               _r=_g=_b=0#math.floor(255-  (x-_shower-_fade1   )     /_float*255)
+        if x>_shower+_fade1+_float and x<_shower+_fade1+_float+_fade2: _r=_g=_b= math.floor( 0 + (x-_shower-_fade1-_float)      /_fade2*255)
+        if x>_shower+_fade1+_float+_fade2:                             _r=_g=_b=255
+        if x>_shower+_fade1+_float+_fade2+_wait:      
+            _r= math.floor(255-(x-_shower-(_fade1+_fade2)-_float  ) /_filter*255 *4)
+            _g= math.floor(255-(x-_shower-(_fade1+_fade2)-_float  ) /_filter*255 *3)
+            _b= math.floor(255-(x-_shower-(_fade1+_fade2)-_float  ) /_filter*255 *2)
+            if _r<0: _r=0
+            if _g<0: _g=0
+            if _b<0: _b=0
+            _r+=math.floor( 0 +(x-_shower-(_fade1+_fade2)-_float  ) / _filter*255)
+            _b+=math.floor( 0 +(x-_shower-(_fade1+_fade2)-_float  ) / _filter*255)
+            if _r>255: _r=255
+            if _g>255: _g=255
+            if _b>255: _b=255
+            
+        def byteclamp(n):
+            n=int(n)
+            if n<0: n=0
+            if n>255: n=255
+            return n
+        
+        if x<_shower+_fade1+_float+_fade2+_wait or True: 
+            _r=byteclamp(_r*(.6*c_r+.4))
+            _g=byteclamp(_g*(.6*c_g+.4))
+            _b=byteclamp(_b*(.6*c_b+.4))                
+        else:
+            _r=byteclamp(_r*(.3*c_r+.7))
+            _g=byteclamp(_g*(.3*c_g+.7))
+            _b=byteclamp(_b*(.3*c_b+.7))
+            
+        pygame.draw.line(gradsurface, (_r,_g,_b), (x,0),(x,h), 1)
+            
     pygame.draw.line(gradsurface, (0,0,0), (_shower,0),(_shower,h), 1)
     pygame.draw.line(gradsurface, (0,0,0), (_shower+_fade1+_float+_fade2,0),(_shower+_fade1+_float+_fade2,h), 1)
     pygame.draw.line(gradsurface, (0,0,0), (_shower+_fade1+_float+_fade2+_wait,0),(_shower+_fade1+_float+_fade2+_wait,h), 1)
@@ -643,24 +668,26 @@ def dephaser():
 
 
 def getserverupdates():
-    while alive:
-        global cur_temp,fthermo,alertMode,lightMode
-        #print("sd=["+server.data+"]")
-        if server.data!='':
-            #print("sd inside=["+server.data+"]")
-            try: j=json.loads(server.data)
-            except Exception as e:
-                print('server-'+str(e))
-                break
-            
-            server.data='' #used it up ;)
-            jk=j.keys()
-            
-            if 'fthermo'   in jk: cur_temp=fthermo=float(j['fthermo'])
-            if 'alertMode' in jk: alertMode=j['alertMode']
-            if 'lightMode' in jk: lightMode=bool(j['lightMode'])
-        time.sleep(.1)
-        
+    try:
+        while alive:
+            global cur_temp,alertMode,lightMode,debugstring
+            #print("sd=["+server.data+"]")
+            if server.data!='':
+                #print("sd inside=["+server.data+"]")
+                try: j=json.loads(server.data)
+                except Exception as e:
+                    print('server-'+str(e))
+                    break
+                
+                server.data='' #used it up ;)
+                jk=j.keys()
+                
+                if 'fthermo'   in jk: cur_temp=j['fthermo']
+                if 'alertMode' in jk: alertMode=j['alertMode']
+                if 'lightMode' in jk: sleepMode=lightMode=bool(j['lightMode'])
+            time.sleep(.1)
+    except: print('serverupdate reboot')
+    
 reason=status_font.render("Are both override switches set to OFF?", 1, (194,184,174))
 reasonSurface.blit(reason,(400-reason.get_rect().width/2,240-reason.get_rect().height/2))
 
@@ -892,13 +919,17 @@ while alive:
                     b=clamp( 2*hpos*( clamp(1-(.500-vpos)/.167)*(vpos<.667) + clamp((1.00-vpos)/.167)*(vpos>=.667) ) )
                     w=clamp((hpos-.5)*2)
                     if w==1: r=g=b=w
-                    debugstring=str((int(100*r),int(100*g),int(100*b),100*w))
-                    client.send(json.dumps({"colvals":{
+                    #debugstring=str((int(100*r),int(100*g),int(100*b),int(100*w)))
+                    colvals={
                         "colval_r":r,
                         "colval_g":g,
                         "colval_b":b,
                         "colval_w":w
-                        }}))
+                        }
+                    colvals_=json.dumps(colvals)
+                    client.send(json.dumps({"colvals":colvals_}))
+                    printer.fout('colvals',colvals_)
+                    reloaded=True
 
                 #CUSTOM MUSIC FADEIN--------------------------------
                 if on_cmusicin and mouseL and not mlock:
@@ -988,8 +1019,8 @@ while alive:
                     if stepper>0 and stepperSpeed==0: custom_duration+=1
                     if stepper<0: custom_duration-=stepperSpeed
                     if stepper>0: custom_duration+=stepperSpeed
-                    if  stepperSpeed<.5: stepperSpeed+=.02
-                    elif stepperSpeed<4: stepperSpeed*=1.18
+                    if  stepperSpeed<.5: stepperSpeed+=.01
+                    elif stepperSpeed<4: stepperSpeed*=1.08
                     if custom_duration<(min_fade1+min_fade2): custom_duration=(min_fade1+min_fade2)
                     if custom_duration>999.9: custom_duration=999
                     floatpreset=math.floor(custom_duration)
@@ -1254,6 +1285,7 @@ while alive:
                     if max_vol<0: max_vol=0
                     if max_vol>1: max_vol=1
                     
+                    
         screens_END=mainscreen+2*floatscreen+4*settingsscreen
         if screens_BEGIN!=screens_END and floatscreen or reloaded: drawgradbar()
         if reloaded: reloaded=False
@@ -1434,7 +1466,7 @@ while alive:
         
         fade=tfade
                     
-        floatelapsed=(time.time()-floatstart)*1+60*min_shower-10
+        #floatelapsed=(time.time()-floatstart)*1+60*min_shower-5
         #floatelapsed=(time.time()-floatstart)*1+60*(min_shower+1*min_fade1)-10
         #floatelapsed=(time.time()-floatstart)*1+60*(min_shower+1*min_fade1+min_float)-10
         #floatelapsed=(time.time()-floatstart)*1+60*(min_shower+(min_fade1+min_fade2)+min_float)-10
@@ -1443,7 +1475,11 @@ while alive:
         #floatelapsed=(time.time()-floatstart)*1+60*(min_shower+(min_fade1+min_fade2)+min_float+min_wait+min_plo+min_phi)-10
     
         #================ ================ ================ ================ ================ 
-        #floatelapsed=(time.time()-floatstart)   #this is the not-testing-for one
+        floatelapsed=(time.time()-floatstart)   #this is the not-testing-for one
+        #debugstring=str(int(min_float+min_fade1+min_fade2))
+        if int(1+min_float+min_fade1+min_fade2)==21: floatelapsed=(time.time()-floatstart)*20
+        if int(1+min_float+min_fade1+min_fade2)==22: floatelapsed=(time.time()-floatstart)*1+60*min_shower-5
+        if int(1+min_float+min_fade1+min_fade2)==23: floatelapsed=(time.time()-floatstart)*1+60*(min_shower+1*min_fade1+min_float)-5
         #================ ================ ================ ================ ================ 
         
         debug = default_font.render(debugstring,1,(90,90,78))
@@ -1509,7 +1545,8 @@ while alive:
         misc=(mouseL!=old_mouseL or remote)
         faded= (fade!=old_fade and (fade==0 or fade==1) and not go)
         
-        if t or go or old or misc or faded or init:
+        if (t or go or old or misc or faded or init) and time.time()>lastsend+.15:
+            lastsend=time.time()
             msg_obj={}
             #if init or old_alertMode!=alertMode: msg_obj["alertMode"]=alertMode
             #if init or old_lightMode!=lightMode: msg_obj["lightMode"]=lightMode
@@ -1557,7 +1594,7 @@ while alive:
                 remote=False
                 json_obj={
                     'tname'        : tname,
-                    'temperature'  : fthermo+t_offset,
+                    'temperature'  : thermoString,
                     'cur_temp'     : math.floor(cur_temp*10)/10,
                     'targ_temp'    : math.floor(targ_temp*10)/10,
                     'pH_lev'       : math.floor(pH_lev*10)/10,
@@ -1581,18 +1618,18 @@ while alive:
                     'trendsscreen'   : str(trendsscreen),
                 }          
             
-        old_lightMode=lightMode
-        old_alertMode=alertMode
-        old_phase=phase
-        old_fade=fade
-        old_sleepMode=sleepMode
-        old_manualfilter=manualfilter
-        old_manualh2o2=manualh2o2
-        old_max_vol=max_vol
-        old_targ_temp=targ_temp_i
-        old_t_offset=t_offset
-        old_min_fade1=min_fade1
-        old_min_fade2=min_fade2
+            old_lightMode=lightMode
+            old_alertMode=alertMode
+            old_phase=phase
+            old_fade=fade
+            old_sleepMode=sleepMode
+            old_manualfilter=manualfilter
+            old_manualh2o2=manualh2o2
+            old_max_vol=max_vol
+            old_targ_temp=targ_temp_i
+            old_t_offset=t_offset
+            old_min_fade1=min_fade1
+            old_min_fade2=min_fade2
         
 #=============================================================================================================================================================#
 

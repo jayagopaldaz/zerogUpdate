@@ -24,5 +24,6 @@ def u():
         time.sleep(5)
         
 Thread(target = c).start()
-Thread(target = l).start()
 Thread(target = u).start()
+time.sleep(40)
+Thread(target = l).start()

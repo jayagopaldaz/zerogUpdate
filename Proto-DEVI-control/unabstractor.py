@@ -28,16 +28,18 @@ import globalvars as glb
 printer.hello(myname,version)
 print(myname+', '+version)
 
-def bootnet():
+def socketboot():
     import mdns_control as mdns
     hmi_ip=(mdns.info.properties[b'eth0']).decode('utf-8')
     my_ip=mdns.ip
     print("hmi ip: "+hmi_ip)
     client.HOST=hmi_ip
+    while not server.ready: continue
     Thread(target=server.init).start()
     Thread(target=client.init).start()
 
-Thread(target=bootnet).start()
+#Thread(target=socketboot).start()
+socketboot()
 
 alive=True
 sleepMode=False
@@ -48,6 +50,7 @@ fade2Light=60
 music = 0
 lastPrint=-30
 pdelay=12
+tick=0
 #--------------------------------------------------------
 volume=old_volume=0
 volume_base=0
@@ -225,6 +228,8 @@ def actionThread():
     lightOffTime=time.time()
     togs=0
     #printer.p(OOO+"actionThread === entering circuit...")    
+    pu_=''
+    pa_=''
     while alive:
         filtermode=glb.manualfilter
         h2o2mode=glb.manualh2o2
@@ -282,14 +287,8 @@ def actionThread():
 
         calThermo=thermo_calibrate(fthermo)
         
-        topHeatOn=3*60
-        topHeatOff=5*60
-        if printer.myID=='Harmony-DEVI': 
-            topHeatOn=30
-            topHeatOff=3*60
-        if printer.myID=='Portland-DEVI1': 
-            topHeatOn=15
-            topHeatOff=2*60
+        topHeatOn=30
+        topHeatOff=3*60
         
         if calThermo<thermotarg and GPIO.input(p_heater1) and time.time()-h12cool>topHeatOff:
             GPIO.output(p_heater1,ON)
@@ -307,36 +306,25 @@ def actionThread():
             GPIO.output(p_heater3,OFF)
             GPIO.output(p_heater4,OFF)
             
-        if GPIO.input(p_user) and not lightMode:
-            togs+=1
-            if togs>12 and time.time()>lightOffTime+1:
-                glb.lightMode=lightMode=True
-                client.send(json.dumps({'lightMode':1}))
-                printer.p("USER LIGHT TRUE");                    
-                setLED(100,quickLight)
-                
-        if not GPIO.input(p_user):
-            lightOffTime=time.time()
-            togs=0
-            if lightMode:
-                glb.lightMode=lightMode=False
-                client.send(json.dumps({'lightMode':0}))
-                printer.p("USER LIGHT FALSE");                    
-                setLED(0,quickLight)
+        #pu_+=str(GPIO.input(p_user))
+        #pa_+=str(GPIO.input(p_alert))
+        #if time.time()-tick>1:
+        #    print('p_user :'+pu_)
+        #    print('p_alert:'+pa_)
+        #    pu_=''
+        #    pa_=''
+        #    tick=time.time()
             
-        if GPIO.input(p_alert) and not alertMode and False:
-            #alertStart=time.time()
-            printer.p("Emergency Light On")
-            glb.alertMode=True
-            alertMode=True
-            setLED('alert',quickLight)
+        if GPIO.input(p_user)!=lightMode: 
+            lightMode=not lightMode
+            client.send(json.dumps({'lightMode':lightMode}))
+            setLED(100*(lightMode),quickLight)
+            
+        if GPIO.input(p_alert)!=alertMode:
+            alertMode=not alertMode
             client.send(json.dumps({'alertMode':alertMode}))
-        if not GPIO.input(p_alert) and alertMode and False: 
-            printer.p("Emergency Light Off")
-            glb.alertMode=False
-            alertMode=False
-            setLED('safe',quickLight*2)
-            client.send(json.dumps({'alertMode':alertMode}))
+            if alertMode: setLED('alert',quickLight)
+            else:         setLED('safe',2*quickLight)
             
         #if not GPIO.input(p_audio) and not jack_in_use:
         #    jack_plugged_in=True
@@ -360,23 +348,23 @@ def actionThread():
             try:
                 statusstring=pre+"=========================="
                 statusstring+=br+"session      : "+str(session)
-                statusstring+=br+"min_float    : "+str(glb.min_float+2*glb.min_fade)
+                #statusstring+=br+"min_float    : "+str(glb.min_float+2*glb.min_fade)
                 statusstring+=br+"raw temp     : "+str(fthermo)
-                statusstring+=br+"times        : "+glb.timeleft_str
-                statusstring+=br+"phase        : "+glb.dephaser()
-                statusstring+="<br>"
-                statusstring+=br+"fade         : "+str(math.floor(glb.fade*100))+"%"
-                statusstring+=br+"lightsOkay   : "+str(glb.lightsOkay)
-                statusstring+="<br>"
-                statusstring+=br+"jack_in_use  : "+str(jack_in_use)
+                #statusstring+=br+"times        : "+glb.timeleft_str
+                #statusstring+=br+"phase        : "+glb.dephaser()
+                #statusstring+="<br>"
+                #statusstring+=br+"fade         : "+str(math.floor(glb.fade*100))+"%"
+                #statusstring+=br+"lightsOkay   : "+str(glb.lightsOkay)
+                #statusstring+="<br>"
+                #statusstring+=br+"jack_in_use  : "+str(jack_in_use)
                 statusstring+=br+"p_user|alert : "+bool_to_on_off(GPIO.input(p_user))+"|"+bool_to_on_off(GPIO.input(p_alert))
                 statusstring+=br+"p_heater1234 : "+heaterString()
-                statusstring+="<br>"
+                #statusstring+="<br>"
                 statusstring+=br+"man_filter   : "+str(filtermode)
                 statusstring+=br+"man_h2o2     : "+str(h2o2mode)
-                statusstring+=br+"max_vol      : "+str(math.floor(glb.max_vol*100))+"%"
-                statusstring+=br+"cust_dur     : "+str(custom_session_duration)
-                statusstring+="<br>"
+                #statusstring+=br+"max_vol      : "+str(math.floor(glb.max_vol*100))+"%"
+                #statusstring+=br+"cust_dur     : "+str(custom_session_duration)
+                #statusstring+="<br>"
                 statusstring+=br+"pdelay       : "+str(math.floor(pdelay*10))+"ds"
                 printer.p(statusstring)
             except: printer.p('unabstractor === status string exception')
@@ -470,7 +458,7 @@ def musicThread():
                 amp.set_volume(ampvol)
                 old_volume=volume
                 new_max_vol=False
-                print(str(ampvol))
+                #print(str(ampvol))
 
     
 #--------------------------------------------------------
@@ -480,10 +468,11 @@ def setLED(l,v):
     printer.fout('targ_lum',str(l))
     printer.fout('targ_lum_vel',str(v))
     printer.fout('targ_lum_time',str(time.time()))
-    volume_base=volume
-    volume_targ=l/100
-    volume_time=time.time()
-    volume_dur=v
+    if l!='alert' and l!='safe':
+        volume_base=volume
+        volume_targ=l/100
+        volume_time=time.time()
+        volume_dur=v
     #setMusic : fade1Music fade2Music
     
     
@@ -495,46 +484,48 @@ def getserverupdates():
     global sleepMode,new_max_vol
     global alive
 
-    while alive:
-        if server.data!='':
-            if server.data=='reboot': os.system('reboot')
-            #print('unabstractor === serverdata:'+str(server.data))
-            
-            try: j=json.loads(server.data)
-            except: return False
-            
-            server.data='' #used it up ;)
-            jk=j.keys()
-            
-            if 'colvals' in jk: printer.fout('colvals',str(j['colvals']))
-            #if 'colval_g' in jk: printer.fout('colval_g',str(j['colval_g']))
-            #if 'colval_b' in jk: printer.fout('colval_b',str(j['colval_b']))
-            #if 'colval_w' in jk: printer.fout('colval_w',str(j['colval_w']))
-            if 'phase' in jk:
-                if glb.phase!=int(j['phase']):                    
-                    glb.phase=int(j['phase'])
-                    if glb.phase==glb.PHASE_NONE: setLED(100,quickLight)
-                    if glb.phase==glb.PHASE_FADE1: setLED(0,fade1Light)
-                    if glb.phase==glb.PHASE_FLOAT: setLED(0,quickLight)
-                    if glb.phase==glb.PHASE_FADE2: setLED(100,fade2Light)
-                    if glb.phase>glb.PHASE_FADE2: setLED(100,quickLight)        
-            if 'h2o2' in jk: glb.manualh2o2=bool(j['h2o2'])
-            if 'filter' in jk: glb.manualfilter=bool(j['filter'])
-            if 'targ_temp' in jk: glb.targ_temp=float(j['targ_temp'])
-            if 't_offset' in jk: glb.t_offset=float(j['t_offset'])                            
-            if 'fade1' in jk: fade1Light=fade1Music=float(j['fade1'])                                           
-            if 'fade2' in jk: fade2Light=fade1Music=float(j['fade2'])
-            if 'max_vol' in jk:
-                glb.max_vol=float(j['max_vol'])
-                printer.fout('max_vol',str(glb.max_vol))
-                new_max_vol=True
-            if 'sleepMode' in jk and not 'reinit' in jk:                           
-                sleepMode=bool(j['sleepMode'])
-                if sleepMode: setLED(0,quickLight)
-                elif glb.phase!=glb.PHASE_FLOAT: setLED(100,quickLight)
+    try:
+        while alive:
+            if server.data!='':
+                if server.data=='reboot': os.system('reboot')
+                #print('unabstractor === serverdata:'+str(server.data))
                 
-        time.sleep(.1)
-
+                try: j=json.loads(server.data)
+                except: return False
+                
+                server.data='' #used it up ;)
+                jk=j.keys()
+                
+                if 'colvals' in jk: printer.fout('colvals',str(j['colvals']))
+                #if 'colval_g' in jk: printer.fout('colval_g',str(j['colval_g']))
+                #if 'colval_b' in jk: printer.fout('colval_b',str(j['colval_b']))
+                #if 'colval_w' in jk: printer.fout('colval_w',str(j['colval_w']))
+                if 'phase' in jk:
+                    if glb.phase!=int(j['phase']):                    
+                        glb.phase=int(j['phase'])
+                        if glb.phase==glb.PHASE_NONE: setLED(100,quickLight)
+                        if glb.phase==glb.PHASE_FADE1: setLED(0,fade1Light)
+                        if glb.phase==glb.PHASE_FLOAT: setLED(0,quickLight)
+                        if glb.phase==glb.PHASE_FADE2: setLED(100,fade2Light)
+                        if glb.phase>glb.PHASE_FADE2: setLED(100,quickLight)        
+                if 'h2o2' in jk: glb.manualh2o2=bool(j['h2o2'])
+                if 'filter' in jk: glb.manualfilter=bool(j['filter'])
+                if 'targ_temp' in jk: glb.targ_temp=float(j['targ_temp'])
+                if 't_offset' in jk: glb.t_offset=float(j['t_offset'])                            
+                if 'fade1' in jk: fade1Light=fade1Music=60*float(j['fade1'])                                           
+                if 'fade2' in jk: fade2Light=fade1Music=60*float(j['fade2'])
+                if 'max_vol' in jk:
+                    glb.max_vol=float(j['max_vol'])
+                    printer.fout('max_vol',str(glb.max_vol))
+                    new_max_vol=True
+                if 'sleepMode' in jk and not 'reinit' in jk:                           
+                    sleepMode=bool(j['sleepMode'])
+                    if sleepMode: setLED(0,quickLight)
+                    elif glb.phase!=glb.PHASE_FLOAT: setLED(100,quickLight)
+                    
+            time.sleep(.1)
+    except: print('serverupdate reboot')
+        
 #--------------------------------------------------------
 timeout=time.time()
 #while not alive and time.time()-timeeout<5: continue
