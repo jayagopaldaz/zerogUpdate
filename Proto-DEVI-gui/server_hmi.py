@@ -1,9 +1,8 @@
-# -*- coding: utf-8 -*-
 #=============================================================================================================================================================#
 
 mypi='gui'
 myname="server_hmi.py"
-version="v.a.1.00"
+version="v.a.1.20"
 abspath='/home/pi/Desktop/'
 
 #=============================================================================================================================================================#
@@ -24,7 +23,7 @@ while not ready:
         ready=True
     except: 
         print('no server bind')
-        time.sleep(1)
+        time.sleep(5)
 
 data=''
 def init():
@@ -38,6 +37,7 @@ def init():
             if not dataB: break
             data=dataB.decode('utf-8')
             if "fthermo" not in data: print("hmi server recvd: " +data)
+            #print("hmi server recvd: " +data)
         conn.close()
         print('control client disconnected')
 

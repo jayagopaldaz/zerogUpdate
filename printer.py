@@ -2,7 +2,7 @@
 
 mypi='shared'
 myname="printer.py"
-version="v.a.1.00"
+version="v.a.1.20"
 abspath='/home/pi/Desktop/'
 
 #=============================================================================================================================================================#
@@ -33,15 +33,6 @@ def helloThread(fn,v):
     p(m)
 
 def pThread(s):
-    #print(s)
-    
-    if silent: return 0
-    #t=str(time.time())
-    #fs=t[-6]+"   :("+s+"):\r\n"
-    #try: logf.write(fs)
-    #except: pass
-    
-    #if len(s)>2048: s=s[0:2048]
     try: r=requests.post('http://'+ip+'/zerog/getgui.php', params={"mode":"print","s":myID+"> "+s})
     except: pass
 

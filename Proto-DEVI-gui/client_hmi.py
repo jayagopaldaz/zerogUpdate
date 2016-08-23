@@ -3,7 +3,7 @@
 
 mypi='gui'
 myname="client_hmi.py"
-version="v.a.1.00"
+version="v.a.1.20"
 abspath='/home/pi/Desktop/'
 
 #=============================================================================================================================================================#
@@ -14,8 +14,6 @@ HOST = ''
 PORT = 9877
 BUFSIZE = 4096
 
-data='test data from hmi'
-dat=bytes(data,'UTF-8')
 pending=False
 
 def send(d):

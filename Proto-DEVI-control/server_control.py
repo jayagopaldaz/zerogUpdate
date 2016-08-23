@@ -2,7 +2,7 @@
 
 mypi='control'
 myname="server_control.py"
-version="v.a.1.00"
+version="v.a.1.20"
 abspath='/home/pi/Desktop/'
 
 #=============================================================================================================================================================#
@@ -23,7 +23,7 @@ while not ready:
         ready=True
     except: 
         print('no server bind')
-        time.sleep(1)
+        time.sleep(5)
 
 data=''
 def init():
@@ -36,7 +36,7 @@ def init():
             dataB = conn.recv(BUFSIZE)
             if not dataB: break
             data=dataB.decode('utf-8')
-            print("control server recvd: " +data)
+            #print("control server recvd: " +data)
         conn.close()
         print('hmi client disconnected')
 

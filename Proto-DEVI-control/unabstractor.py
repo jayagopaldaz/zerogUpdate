@@ -3,7 +3,7 @@
 
 mypi='control'
 myname="unabstractor.py"
-version="v.a.1.01"
+version="v.a.1.20"
 abspath='/home/pi/Desktop/'
 
 #=============================================================================================================================================================#
@@ -16,7 +16,6 @@ import pygame
 import vlc
 import random
 import json
-import _rpi_ws281x as ws
 import RPi.GPIO as GPIO
 from subprocess import call
 from threading import Thread
@@ -42,7 +41,7 @@ def socketboot():
 socketboot()
 
 alive=True
-sleepMode=False
+#sleepMode=False
 init=True
 quickLight=3
 fade1Light=60
@@ -52,36 +51,12 @@ lastPrint=-30
 pdelay=12
 tick=0
 #--------------------------------------------------------
-volume=old_volume=0
+volume=0
 volume_base=0
 volume_targ=1
 volume_time=time.time()
 volume_dur=1
 new_max_vol=False
-
-LED_CHANNEL    = 0
-LED_COUNT      = 64         # How many LEDs to light.
-LED_FREQ_HZ    = 800000     # Frequency of the LED signal.  Should be 800khz or 400khz.
-LED_DMA_NUM    = 0          # DMA channel to use, can be 0-14.
-LED_GPIO       = 18         # GPIO connected to the LED signal line.  Must support PWM!
-LED_BRIGHTNESS = 255        # Set to 0 for darkest and 255 for brightest
-LED_INVERT     = 0          # Set to 1 to invert the LED signal, good if using NPN
-leds = ws.new_ws2811_t()
-for channum in range(2):    # Initialize all channels to off
-    channel = ws.ws2811_channel_get(leds, channum)
-    ws.ws2811_channel_t_count_set(channel, 0)
-    ws.ws2811_channel_t_gpionum_set(channel, 0)
-    ws.ws2811_channel_t_invert_set(channel, 0)
-    ws.ws2811_channel_t_brightness_set(channel, 0)
-
-channel = ws.ws2811_channel_get(leds, LED_CHANNEL)
-ws.ws2811_channel_t_count_set(channel, LED_COUNT)
-ws.ws2811_channel_t_gpionum_set(channel, LED_GPIO)
-ws.ws2811_channel_t_invert_set(channel, LED_INVERT)
-ws.ws2811_channel_t_brightness_set(channel, LED_BRIGHTNESS)
-ws.ws2811_t_freq_set(leds, LED_FREQ_HZ)
-ws.ws2811_t_dmanum_set(leds, LED_DMA_NUM)
-ws.ws2811_init(leds)
 
 OFF=1
 ON=0
@@ -93,8 +68,7 @@ faded_out=False
 unfaded=False
 lightMode=not False #inverted for faster on (slower off)
 alertMode=False
-    
-  
+
 fthermo=0
 session_60=True
 session_90=False
@@ -162,6 +136,9 @@ GPIO.setup(p_audio, GPIO.IN)
 GPIO.setup(p_user, GPIO.IN)
 GPIO.setup(p_alert, GPIO.IN)
 
+lightToggle=GPIO.input(p_user)
+alertToggle=GPIO.input(p_alert)
+
 
 #--------------------------------------------------------
 def thermo_calibrate(t):
@@ -176,33 +153,39 @@ def temperatureThread():
     global fthermo
     
     printer.p(OOO+"temperatureThread === entering circuit...")    
+    thermo_sensor=-1
     while alive:
-        try:
-            f = open(thermo_sensor, 'r')
-            lines = f.readlines()
-            f.close()
+        if thermo_sensor!=-1:
+            try:
+                f = open(thermo_sensor, 'r')
+                lines = f.readlines()
+                f.close()
 
-            if lines[0].strip()[-3:] != 'YES': return 0
-            thermo_output = lines[1].find('t=')
-            if thermo_output != -1:
-                thermo_string = lines[1].strip()[thermo_output+2:]
-                thermo_c = float(thermo_string) / 1000.0
-                thermo_f = thermo_c * 9.0 / 5.0 + 32.0
-                fthermo=math.floor(thermo_f*10)/10
-                client.send(json.dumps({'fthermo':fthermo}))
-        except:
-            fthermo="-1"
-            client.send(json.dumps({'fthermo':fthermo}))
+                if lines[0].strip()[-3:] != 'YES': thermo_sensor=-1
+                else:
+                    thermo_output = lines[1].find('t=')
+                    if thermo_output != -1:
+                        thermo_string = lines[1].strip()[thermo_output+2:]
+                        thermo_c = float(thermo_string) / 1000.0
+                        thermo_f = thermo_c * 9.0 / 5.0 + 32.0
+                        fthermo=math.floor(thermo_f*10)/10
+                        client.send(json.dumps({'fthermo':fthermo}))
+                
+            except: 
+                print('thermo exception@171')
+                thermo_sensor=-1
+        else:
+            fthermo=''
+            if thermo_sensor!=-1: client.send(json.dumps({'fthermo':fthermo}))
             os.system('modprobe w1-gpio')
             os.system('modprobe w1-therm')
             fns = [fn for fn in os.listdir("/sys/bus/w1/devices/")]
             for i in fns:
-                #print(i)
                 if i[:2]=="28": thermo_sensor = '/sys/bus/w1/devices/'+i+'/w1_slave'
-                else: thermo_sensor = ''
+                else: thermo_sensor = -1
                 
         time.sleep(1)
-            
+    
 #--------------------------------------------------------
 def actionThread():
     OOO="                                                                                                               "
@@ -213,6 +196,7 @@ def actionThread():
     global unfaded,faded_out
     global lastPrint,pdelay
     global lightMode,alertMode
+    global lightToggle,alertToggle
     global alive
     
     thermo="I can't feel the water"
@@ -315,12 +299,14 @@ def actionThread():
         #    pa_=''
         #    tick=time.time()
             
-        if GPIO.input(p_user)!=lightMode: 
+        if GPIO.input(p_user)!=lightToggle: 
+            lightToggle=not lightToggle
             lightMode=not lightMode
             client.send(json.dumps({'lightMode':lightMode}))
             setLED(100*(lightMode),quickLight)
             
-        if GPIO.input(p_alert)!=alertMode:
+        if GPIO.input(p_alert)!=alertToggle:
+            alertToggle=not alertToggle
             alertMode=not alertMode
             client.send(json.dumps({'alertMode':alertMode}))
             if alertMode: setLED('alert',quickLight)
@@ -414,7 +400,7 @@ def musicThread():
     OOO="                                                                                                                         "
     printer.p(OOO+"musicThread === checking in...")    
     global music,alive,new_max_vol
-    global volume,old_volume,volume_base,volume_targ,volume_time,volume_dur
+    global volume,volume_base,volume_targ,volume_time,volume_dur
     
     try:
         amp = MAX9744() #amp = MAX9744(busnum=2, address=0x4C)
@@ -426,6 +412,7 @@ def musicThread():
 
     music=vlc.MediaPlayer("file://"+abspath+"default.mp3")
     printer.p(OOO+"musicThread === entering circuit...")    
+    old_ampvol=ampvol=0
     while alive:
         music.play()
         mstate=str(music.get_state())
@@ -451,20 +438,25 @@ def musicThread():
             m+=str(int(time.time()-volume_time))+" | dur:"
             m+=str(volume_dur)
             #print(m)
-            if (old_volume != volume or new_max_vol) and not noAmp:
-                ampvol=math.floor(volume*63*glb.max_vol)
-                if ampvol<0: ampvol=0
-                if ampvol>63: ampvol=63
-                amp.set_volume(ampvol)
-                old_volume=volume
+            def clamp64(v):
+                if v<0: v=0
+                if v>63: v=63
+                return int(v)
+                
+            ampvol=.9*ampvol +.1*(volume*63*glb.max_vol)
+            if (old_ampvol != ampvol or new_max_vol) and not noAmp:
+                amp.set_volume(clamp64(ampvol))
                 new_max_vol=False
                 #print(str(ampvol))
+            old_ampvol=ampvol
 
     
 #--------------------------------------------------------
 def setLED(l,v):
-    global volume,old_volume,volume_base,volume_targ,volume_time,volume_dur
-    print('[setLED: lum='+str(l)+", vel="+str(v)+']')
+    global volume,volume_base,volume_targ,volume_time,volume_dur,lightMode
+    print('setLED === lum:'+str(l)+", vel:"+str(v))
+    if l==100: lightMode=True
+    if l==0: lightMode=False
     printer.fout('targ_lum',str(l))
     printer.fout('targ_lum_vel',str(v))
     printer.fout('targ_lum_time',str(time.time()))
@@ -481,25 +473,23 @@ def setLED(l,v):
 #--------------------------------------------------------
 def getserverupdates():
     global init
-    global sleepMode,new_max_vol
+    #global sleepMode,
+    global new_max_vol,lightMode
     global alive
 
     try:
         while alive:
             if server.data!='':
                 if server.data=='reboot': os.system('reboot')
-                #print('unabstractor === serverdata:'+str(server.data))
+                if "reinit" not in server.data: print('unabstractor === serverdata:'+str(server.data))
                 
                 try: j=json.loads(server.data)
-                except: return False
+                except: print('json exception@getserverupdates')
                 
                 server.data='' #used it up ;)
                 jk=j.keys()
                 
                 if 'colvals' in jk: printer.fout('colvals',str(j['colvals']))
-                #if 'colval_g' in jk: printer.fout('colval_g',str(j['colval_g']))
-                #if 'colval_b' in jk: printer.fout('colval_b',str(j['colval_b']))
-                #if 'colval_w' in jk: printer.fout('colval_w',str(j['colval_w']))
                 if 'phase' in jk:
                     if glb.phase!=int(j['phase']):                    
                         glb.phase=int(j['phase'])
@@ -518,10 +508,16 @@ def getserverupdates():
                     glb.max_vol=float(j['max_vol'])
                     printer.fout('max_vol',str(glb.max_vol))
                     new_max_vol=True
-                if 'sleepMode' in jk and not 'reinit' in jk:                           
-                    sleepMode=bool(j['sleepMode'])
-                    if sleepMode: setLED(0,quickLight)
-                    elif glb.phase!=glb.PHASE_FLOAT: setLED(100,quickLight)
+                if 'lightMode' in jk:                           
+                    #lightMode_=bool(j['lightMode'])
+                    #if lightMode!=lightMode_:
+                    #    lightMode=lightMode_
+                    #    if lightMode: setLED(100,quickLight)
+                    #    else: setLED(0,quickLight)
+                    #    #elif glb.phase!=glb.PHASE_FLOAT: setLED(100,quickLight)
+                    lightMode=bool(j['lightMode'])
+                    if lightMode: setLED(100,quickLight)
+                    else: setLED(0,quickLight)
                     
             time.sleep(.1)
     except: print('serverupdate reboot')

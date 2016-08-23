@@ -2,7 +2,7 @@
 
 mypi='control'
 myname="client_control.py"
-version="v.a.1.00"
+version="v.a.1.20"
 abspath='/home/pi/Desktop/'
 
 #=============================================================================================================================================================#
@@ -13,8 +13,6 @@ HOST = ''
 PORT = 9876
 BUFSIZE = 4096
 
-data='test data from control'
-dat=bytes(data,'UTF-8')
 pending=False
 
 def send(d):

@@ -3,7 +3,7 @@
 
 mypi='gui'
 myname="zerog.py"
-version="v.a.1.00"
+version="v.a.1.20"
 abspath='/home/pi/Desktop/'
 
 #=============================================================================================================================================================#
@@ -53,7 +53,7 @@ targ_temp=93.5
 pH_lev=7.0
 ORP_lev=200
 p_heater1234="----"
-thermoString=str(ct)+" °F"
+thermoString=""
 remote=False
 init=True
 even=False
@@ -72,12 +72,16 @@ lastPrint=0
 lastsend=0
 floatelapsed=0
 status_str="READY"
-phase=-1
+phase=-3
 stopcount=False
 lightMode=True
 alertMode=False
 timeleft_str="READY"
-sleepMode=False
+wlanSorted=[]
+ssidSelect=False
+pwdSelect=''
+
+#sleepMode=False
 try: colvals=json.loads(printer.fin('colvals'))
 except: colvals={"colval_r":1.0,"colval_g":0.7,"colval_b":1.0,"colval_w":1.0}
 print("this is .fin colvals:"+str(colvals))
@@ -139,6 +143,7 @@ playfloat         = False
 settingsscreen    = False
 customscreen      = False
 levelsscreen      = False
+wifiscreen        = False
 runtimescreen     = False
 r1screen          = False
 r2screen          = False
@@ -194,6 +199,7 @@ if printer.fin('playfloat')      =="True": playfloat      = True
 if printer.fin('settingsscreen') =="True": settingsscreen = True
 if printer.fin('customscreen')   =="True": customscreen   = True
 if printer.fin('levelsscreen')   =="True": levelsscreen   = True
+if printer.fin('wifiscreen')     =="True": wifiscreen     = True
 if printer.fin('runtimescreen')  =="True": runtimescreen  = True
 if printer.fin('trendsscreen')   =="True": trendsscreen   = True
 if printer.fin('manualfilter')   =="True": manualfilter   = True
@@ -231,6 +237,7 @@ filter   =pygame.image.load(abspath+'guiassets/settings/filter.png')
 h2o2     =pygame.image.load(abspath+'guiassets/settings/h2o2.png')
 volume   =pygame.image.load(abspath+'guiassets/settings/volume.png')
 levels   =pygame.image.load(abspath+'guiassets/settings/levels.png')
+wifi     =pygame.image.load(abspath+'guiassets/settings/trends.png')
 runtime  =pygame.image.load(abspath+'guiassets/settings/runtime.png')
 rt_edit  =pygame.image.load(abspath+'guiassets/settings/rt_edit.png')
 trends   =pygame.image.load(abspath+'guiassets/settings/trends.png')
@@ -283,7 +290,8 @@ sleep_button     = pygame.Rect( 60, 352-vOffset, 76,76)
 gear_button      = pygame.Rect(668, 352-vOffset, 76,76)
 
 therm_button     = pygame.Rect( 60, 352-vOffset, 76,76)
-runtime_button   = pygame.Rect(668,  78-vOffset, 76,76)
+wifi_button      = pygame.Rect(668,  78-vOffset, 76,76)
+runtime_button   = pygame.Rect(668, 78+(352-78)/2-vOffset, 76,76)
 trends_button    = pygame.Rect(668, 352-vOffset, 76,76)
 levels_button    = pygame.Rect(0,0,1,1)
 
@@ -315,14 +323,14 @@ rt_reset_button  = pygame.Rect(300, 330-vOffset, 200,150)
 
 gradbar_button   = pygame.Rect(gradBarLeft,gradBarTop,gradBarWidth,gradBarHeight)
 
-default_font      = pygame.font.Font(abspath+"guiassets/main/kozgoxl.otf",16)
-tankname_font     = pygame.font.Font(abspath+"guiassets/main/kozgoxl.otf",54)
-status_font       = pygame.font.Font(abspath+"guiassets/main/kozgoxl.otf",30)
+default_font      = pygame.font.Font(abspath+"guiassets/kozgoxl.otf",16)
+tankname_font     = pygame.font.Font(abspath+"guiassets/kozgoxl.otf",54)
+status_font       = pygame.font.Font(abspath+"guiassets/kozgoxl.otf",30)
 
 introfade1=0
 introfade2=0
 
-
+wifilist=-5
 
 #================================ DEFINE SUBROUTINES ================================                
 #-----------------------------------------------------------------
@@ -356,6 +364,7 @@ def tankname():
 
     f=(min_shower+(min_fade1+min_fade2)+min_float)*60-floatelapsed
     if f<0: f=totalDuration*60-floatelapsed
+    
     h=math.floor(f/60/60)
     f-=h*60*60
     m=math.floor(f/60)
@@ -366,28 +375,36 @@ def tankname():
     s_str=str(s)
     if m<10: m_str="0"+m_str
     if s<10: s_str="0"+s_str
-    #12:04 pm"
-    tar=time.localtime( floatstart+totalDuration*60 )
-    ampm=" am"
-    hb=tar[3]
-    if hb>11: ampm=" pm"
-    if hb>12: hb-=12
-    mb=tar[4]
-    mb_str=str(mb)
-    if mb<10: mb_str="0"+mb_str
-    timeleft_str=h_str+":"+m_str+":"+s_str+" • "+str(hb)+":"+mb_str+ampm
+    
+    def time_str(t):
+        tar=time.localtime( t )
+        ampm=" am"
+        hb=tar[3]
+        if hb>11: ampm=" pm"
+        if hb>12: hb-=12
+        if hb==0: hb=12
+        mb=tar[4]
+        mb_str=str(mb)
+        if mb<10: mb_str="0"+mb_str
+        return str(hb)+":"+mb_str+ampm
+    
+    timeleft_str=h_str+":"+m_str+":"+s_str+" • "+time_str(floatstart+totalDuration*60)
 
     fps1=time.time()-fpst
     fps=fps*.99+fps1*.01
     fpst=time.time()
     if not floatInProgress: timeleft_str = "READY"    
-    if alertMode or (lightMode and not sleepMode):
+    if alertMode or lightMode:
         timeleft_str+=" - "
         if alertMode: timeleft_str+="ALERT"
-        elif lightMode or sleepMode: timeleft_str+="LIGHT ON"
-    #debugstring=str(lightMode)+"<LM|SM>"+str(sleepMode)
-    try: thermoString=str(int(10*(cur_temp+t_offset))/10)+" °F"
-    except: thermoString="-"
+        elif lightMode: timeleft_str+="LIGHT ON"
+    
+    #debugstring=str(time.time()-cur_temp_refresh)
+    if time.time()>cur_temp_refresh+6: thermoString=time_str(time.time())+" • - °F"
+    else: 
+        try: thermoString=time_str(time.time())+" • "+str(int(10*(cur_temp+t_offset))/10)+" °F"
+        except: thermoString=time_str(time.time())+" • - °F"
+    
     
     timeleft = default_font.render(timeleft_str,1,(140,140,128))
     timeelapsed = default_font.render(str(math.floor(floatelapsed/60))+"min",1,(140,140,128))
@@ -438,6 +455,7 @@ def trendgraph():
     y2=0
     
     pygame.draw.line(graph, (56,94,116), (0,100),(600,100), 1)
+    
     for x in range(-2,w-1):
         y1=y2
         xt=x+time.time()*10
@@ -447,11 +465,130 @@ def trendgraph():
     
     stage.blit(graph,(102,152))
     more1=status_font.render("TEMPERATURE",1,(128,203,224))
-    more2=default_font.render("pH  |  ORP  |  SPEC.GRAV.  |  SALT",1,(28,103,124))
+    more2=default_font.render("pH  |  ORP  |  SPEC.GRAV.  |  SALT  |  H2O2 s.",1,(28,103,124))
     targ=default_font.render("93.5 °F",1,(28,103,124))
     stage.blit(more1, (400-more1.get_rect().width/2, 50))
     stage.blit(more2, (400-more2.get_rect().width/2, 90))
     stage.blit(targ, (710, 250))
+
+#-----------------------------------------------------------------
+keybshift=False
+keybcaps=False
+keybEnter=False
+keyb_str=''
+keyb_i=0
+blink=time.time()
+blinktoggle=True
+def keyboard():
+    global debugstring,blink,blinktoggle
+    
+    kreg=[
+        "`1234567890-=",
+        "qwertyuiop[]",
+        "asdfghjkl;'",
+        "zxcvbnm,./"
+        ]
+
+    kshift=[
+        "~!@#$%^&*()_+",
+        "QWERTYUIOP{}",
+        'ASDFGHJKL:"',
+        "ZXCVBNM<>?"
+        ]
+
+    wb=799
+    hb=201
+    board = pygame.Surface((wb,hb))
+    board.fill((25,25,25))
+    
+    #debugstring=str(pos)
+    def insert(l):
+        global keyb_i,keyb_str,keybshift,keybcaps,keybEnter
+        
+        if l=='Caps': 
+            keybcaps=not keybcaps
+            if keybcaps: keybshift=False
+        
+        elif l=='Shift': 
+            keybshift=not keybshift
+            if keybshift: keybcaps=False
+        
+        elif l=='Back':
+            if keyb_i>0: 
+                keyb_str=keyb_str[:keyb_i-1]+keyb_str[keyb_i:]
+                keyb_i-=1
+        
+        elif l=='Esc': 
+            keyb_i=0
+            keyb_str=''
+            
+        elif l=='Enter': 
+            keybEnter=True
+            print('ENTER')
+            
+        elif l=='←': keyb_i-=1
+        elif l=='→': keyb_i+=1
+        
+        else:
+            keyb_str=keyb_str[:keyb_i]+l+keyb_str[keyb_i:]
+            keybshift=False
+            keyb_i+=1
+    
+        if keyb_i<0:keyb_i=0
+        if keyb_i>len(keyb_str):keyb_i=len(keyb_str)
+        
+    def addkey(l,x,y,w):
+        global debugstring,blink,blinktoggle
+        #debugstring=l
+        c=(128,203,224)
+        if (l=='Shift' and keybshift) or (l=='Caps' and keybcaps): c=(255,255,255)
+        keyrect=pygame.Rect(x, y, w, 51+50*(l=='Enter'))
+        keyrectmouse=pygame.Rect(x, y+479-hb, w, 51+50*(l=='Enter'))
+        pygame.draw.rect(board, (90,90,90),keyrect, 1-(keybshift and l=='Shift')-(keybcaps and l=='Caps'))
+        kl=status_font.render(l,1,c)
+        board.blit(kl, (x+w/2-kl.get_rect().width/2, 10+y+25*(l=='Enter')))
+        if go and keyrectmouse.collidepoint(pos): 
+            blink=time.time()
+            blinktoggle=True
+            insert(l)
+    
+    ky=0
+    kxo=50
+    
+    if keybshift or keybcaps: karr=kshift
+    else: karr=kreg
+    
+    for krow in karr:
+        for kx in range(0,len(krow)): addkey(krow[kx],kxo+kx*50,ky,50)
+        ky+=50
+        kxo+=25
+    
+    #shift
+    addkey('Esc',0,0,50)
+    addkey('Caps',0,50,75)
+    addkey('Shift',0,100,100)
+    addkey(' ',0,150,125)
+    addkey('Back',700,0,100)
+    addkey('Enter',700,50,100)
+    addkey('←',700,150,50)
+    addkey('→',750,150,50)
+      
+    stage.blit(board,(0,479-hb))
+    
+    txt=status_font.render(keyb_str,1,(128,203,224))
+    txtx=400-txt.get_rect().width/2
+    stage.blit(txt, (txtx, 150))
+    for i in range(0,keyb_i):
+        c=status_font.render(keyb_str[i],1,(128,203,224))
+        txtx+=c.get_rect().width
+        
+    if time.time()>blink+.3:
+        blink=time.time()
+        blinktoggle=not blinktoggle
+    if blinktoggle: pygame.draw.line(stage, (156,224,255), (txtx,145),(txtx,185), 2)
+    
+    return keyb_str
+
 
 #-----------------------------------------------------------------
 def timey(t):
@@ -666,14 +803,12 @@ def dephaser():
     if ph==9000: return "PHASE_SHUTOFF"
     return "WEIRD->"+str(ph)
 
-
+cur_temp_refresh=0
 def getserverupdates():
     try:
         while alive:
-            global cur_temp,alertMode,lightMode,debugstring
-            #print("sd=["+server.data+"]")
+            global cur_temp,alertMode,lightMode,debugstring,cur_temp_refresh
             if server.data!='':
-                #print("sd inside=["+server.data+"]")
                 try: j=json.loads(server.data)
                 except Exception as e:
                     print('server-'+str(e))
@@ -682,9 +817,12 @@ def getserverupdates():
                 server.data='' #used it up ;)
                 jk=j.keys()
                 
-                if 'fthermo'   in jk: cur_temp=j['fthermo']
                 if 'alertMode' in jk: alertMode=j['alertMode']
-                if 'lightMode' in jk: sleepMode=lightMode=bool(j['lightMode'])
+                if 'lightMode' in jk: lightMode=bool(j['lightMode'])
+                if 'fthermo'   in jk: 
+                    cur_temp=j['fthermo']
+                    cur_temp_refresh=time.time()
+                #old_sleepMode=sleepMode=not lightMode
             time.sleep(.1)
     except: print('serverupdate reboot')
     
@@ -696,33 +834,6 @@ lastInit=time.time()-100
 if trendsscreen: updatelog()
 
 #================================ THE MAIN LOOP ================================                
-##def zerogAlive():
-##    global lastLog,lastInit
-##    global debugstring
-##    global alive,touched,go
-##    global introfade1,introfade2
-##    global layer0,layer1,layer2,layer3,layer4
-##    global floatscreen,settingsscreen,customscreen,levelsscreen,runtimescreen,trendsscreen
-##    global playfloat,prog
-##    global alpha0,alpha1,alpha2,alpha3,alpha4,gradalpha
-##    global lastPrint,reloaded,stepperSpeed
-##    global min_float,max_vol,sleepMode
-##    global manualfilter,manualh2o2,overrideWarning
-##    global min_fade1,min_fade2,custom_duration
-##    global countdown_num, countdownstart, stopcount
-##    global fout_customMFadein,fout_customMFadeout,fout_customLFadein,fout_customLFadeout,fout_customDuration
-##    global ct,cur_temp,targ_temp,pH_lev,ORP_lev,t_offset,old_cur_temp,thermoString
-##    global fout_currentTemperature,fout_targetTemperature,fout_pH,fout_ORP
-##    global floatpreset,floatInProgress,floatelapsed,floatstart,fade,status_str,phase
-##    global r1screen,r2screen,r3screen
-##    global rt_filter_max,rt_uvbulb_max,rt_solution_max
-##    global rt_filter_thresh,rt_uvbulb_thresh,rt_solution_thresh
-##    global fout_rt_max,fout_rt_thresh
-##    global filter_runtime,uvbulb_runtime,rt_solution_start,last_rt
-##    global json_obj,remote,init
-##    global lightMode,alertMode
-    
-    
 if settingsscreen and manualfilter: layer1=filter
 if settingsscreen and manualh2o2: layer2=h2o2
 
@@ -733,36 +844,36 @@ printer.p(OOO+"zerogAlive === entering circuit...")
 #pygame.mouse.set_pos(799,479)
 changed=1
 mlock=False
-old_lightMode=lightMode
-old_alertMode=alertMode
+#old_lightMode=lightMode
+#old_alertMode=alertMode
 old_phase=phase
 old_fade=fade
-old_sleepMode=sleepMode
+#old_sleepMode=sleepMode
 old_manualfilter=manualfilter
 old_manualh2o2=manualh2o2
 old_max_vol=max_vol
 old_targ_temp=targ_temp_i=int(targ_temp*10)/10
 old_t_offset=t_offset
 old_min_fade1=min_fade1
-old_min_fade1=min_fade2
+old_min_fade2=min_fade2
 
 mouseL=old_mouseL=0
 fout_ct_time=time.time()
 
 Thread(target=getserverupdates).start()
 while alive:
-    exScr=(not customscreen and not levelsscreen and not runtimescreen and not trendsscreen)
+    exScr=(not customscreen and not levelsscreen and not wifiscreen and not runtimescreen and not trendsscreen)
 
     for e in pygame.event.get(): continue
     #try: debugstring=(str(time.time()%10)[:4]+" : "+str(e.dict['pos'])+" | "+str(pygame.event.get_grab()))
-    #except Exception as ex: pass #print(str(ex)+"[pygame.event]")
+    #except: pass#print('exception@768')
     
     #pygame.event.pump()
     if time.time()-start<2:
         bglogo.set_alpha(introfade1)
         introfade1+=10
         if introfade1>255: introfade1=255
-        screen.blit(bglogo,(0,-vOffset))
+        screen.blit(bglogo,(0,0))
         #pygame.display.flip()
         pygame.display.update()
 
@@ -782,7 +893,9 @@ while alive:
         
         if mouseL==1 and not touched: go=touched=True
         elif mouseL==1 and touched: go=False
-        else: go=touched=mlock=False
+        else:
+            go=touched=mlock=False
+            lastsend=time.time()-1
         if go: even=False
         changed=1
         
@@ -803,6 +916,7 @@ while alive:
 
         on_therm     =     therm_button.collidepoint(pos)
         on_levels    =    levels_button.collidepoint(pos)
+        on_wifi      =      wifi_button.collidepoint(pos)
         on_runtime   =   runtime_button.collidepoint(pos)
         on_trends    =    trends_button.collidepoint(pos)
 
@@ -870,6 +984,13 @@ while alive:
                 updatelog()
                 printer.fout('trendsscreen',str(trendsscreen)) 
 
+            if on_wifi and go and settingsscreen and exScr: 
+                mlock=True
+                wifiscreen = True 
+                wifilist=-5
+                ssidSelect=False
+                printer.fout('wifiscreen',str(wifiscreen)) 
+            
             if on_runtime and go and settingsscreen and exScr: 
                 mlock=True
                 runtimescreen = True 
@@ -878,7 +999,8 @@ while alive:
             if ((on_levels and go and not settingsscreen) or (on_therm and go and settingsscreen)) and exScr: 
                 mlock=True
                 levelsscreen = True
-                ct=cur_temp+t_offset
+                try: ct=cur_temp+t_offset
+                except: print('exception @885')
                 printer.fout('levelsscreen',str(levelsscreen))
 
             #============================================================================
@@ -1038,16 +1160,22 @@ while alive:
             #============================================================================
             if trendsscreen:
                 layer0=trends
-                
+            
+            #============================================================================
+            #                             WIFISCREEN
+            #============================================================================
+            if wifiscreen:
+                layer0=wifi
+                        
             #============================================================================
             #                            RUNTIMESCREEN
             #============================================================================
             if runtimescreen:
                 layer0=runtime
                 
-                if on_rt_filter and go and not r2screen and not r3screen: mlock=r1screen=True
-                if on_rt_uvbulb and go and not r1screen and not r3screen: mlock=r2screen=True
-                if on_rt_salt   and go and not r1screen and not r2screen: mlock=r3screen=True
+                if on_rt_filter and go and not r2screen and not r3screen and not mlock: mlock=r1screen=True
+                if on_rt_uvbulb and go and not r1screen and not r3screen and not mlock: mlock=r2screen=True
+                if on_rt_salt   and go and not r1screen and not r2screen and not mlock: mlock=r3screen=True
                 
                 if r1screen or r2screen or r3screen:
                     layer0=rt_edit
@@ -1160,7 +1288,9 @@ while alive:
                     printer.fout('t_offset',str(t_offset))
                     fout_currentTemperature=False
                 elif not mouseL:
-                    if time.time()>fout_ct_time+3: ct=cur_temp+t_offset
+                    try: 
+                        if time.time()>fout_ct_time+3: ct=cur_temp+t_offset
+                    except: print('exception@1168')
                     stepperSpeed=0
 
                 if on_ttarg and mouseL and not mlock:
@@ -1288,10 +1418,13 @@ while alive:
                     
         screens_END=mainscreen+2*floatscreen+4*settingsscreen
         if screens_BEGIN!=screens_END and floatscreen or reloaded: drawgradbar()
-        if reloaded: reloaded=False
+        if reloaded: 
+            floatpreset=-1
+            reloaded=False
         
         if on_sleep and go and not settingsscreen:
-            sleepMode=not sleepMode
+            lightMode=not lightMode
+            client.send(json.dumps({"lightMode":lightMode}))
             countdownstart=time.time()                
         if on_sleep and mouseL and not settingsscreen and time.time()>countdownstart+1:
             stopcount=True
@@ -1321,7 +1454,7 @@ while alive:
                     
         if not settingsscreen and exScr:
             tankname()
-            if sleepMode: stage.blit(lightoff,(69, 363-vOffset))
+            if not lightMode: stage.blit(lightoff,(69, 363-vOffset))
             
             if floatscreen and exScr:
                 gradbar()
@@ -1338,8 +1471,132 @@ while alive:
             if on_back and go: trendsscreen=False
             if on_back and go: printer.fout('trendsscreen',str(trendsscreen))
             trendgraph()
-            even=True
+            even=True #render every frame
+        
+        if wifiscreen:
+            if on_back and go: 
+                mlock=True
+                if ssidSelect: ssidSelect=False
+                else: 
+                    wifiscreen=False
+                    printer.fout('wifiscreen',str(wifiscreen))
             
+            if not ssidSelect:
+                if wifilist<0:
+                    ssid=default_font.render("I'm looking for Wireless Networks now...",1,(64,108,160))
+                    stage.blit(ssid, (400-ssid.get_rect().width/2, 50))
+                    wifilist+=1
+                elif wifilist==0:
+                    wifilist=1
+                    os.system('iwlist wlan0 scan > '+abspath+'var/wlan0list')
+                    os.system('iwlist wlan1 scan > '+abspath+'var/wlan1list')
+                    
+                    wlan=[]
+                    def wifiparse(raw,arr):
+                        global wlan
+                        pos=1
+                        while pos and pos<len(raw):
+                            pos=raw.find('\n')
+                            line = raw[:pos]
+                            raw=raw[pos+1:]
+                            if "Cell " in line: wlan.append({})
+                            if "Quality=" in line: 
+                                quality=line[line.find('=')+1:]
+                                quality="000"+quality[:quality.find('/')]
+                                quality=quality[-3:]
+                                wlan[len(wlan)-1]['quality']=quality
+                            if "SSID:" in line: 
+                                ssid=line[line.find('"')+1:]
+                                ssid=ssid[:ssid.find('"')]
+                                wlan[len(wlan)-1]['ssid']=ssid
+                            
+                        return 0
+
+                    wifiparse(printer.fin('wlan0list'),wlan)
+                    wifiparse(printer.fin('wlan1list'),wlan)
+
+                    for i in wlan:
+                        keys=i.keys()
+                        if not 'quality' in keys: wlan.remove(i)
+
+                    wlanSorted = sorted(wlan, key=lambda k: k['quality'], reverse=True)
+                    
+                else:
+                    ssid=default_font.render("Select your Wireless Network whenever you're ready :)",1,(64,108,160))
+                    stage.blit(ssid, (400-ssid.get_rect().width/2, 50))
+                    y=100
+                    for i in wlanSorted:
+                        if y>420: continue
+                        ssid=status_font.render(i['ssid'],1,(128,183,224))
+                        stage.blit(ssid, (500-ssid.get_rect().width, y))
+                        
+                        qualityrect = pygame.Rect(520, y+5, int(i['quality']), 20)
+                        maxrect     = pygame.Rect(520, y+5, 100,               20)
+                        
+                        pygame.draw.rect(stage, (90,110,130),qualityrect, 0)        
+                        pygame.draw.rect(stage, (90,90,90),maxrect, 1)        
+                        y+=50
+            
+                    if not on_back and go and not mlock:
+                        select=int((pos[1]-100)/50)
+                        if select<0: select=0
+                        if select<=len(wlanSorted) and select<=6: ssidSelect=wlanSorted[select]['ssid']
+                        #    select=len(wlanSorted)
+                        #    debugstring=wlanSorted[select]['ssid']
+                    
+            else:
+                mlock=True
+                #commit=keyboard()
+                keyboard()
+                if keybEnter:
+                    keybEnter=False
+                    pwdSelect=keyb_str
+                    #newkey='ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev\n'
+                    #newkey+='\nnetwork={\n\tssid=\"'+ssidSelect+'\"\n\tpsk=\"'+pwdSelect+'\"\n\tkey_mgmt=WPA-PSK\n}'
+                    #os.system('echo "'+newkey+'" > /etc/wpa_supplicant/wpa_supplicant.conf')
+                    newkey='\nnetwork={\n\tssid=\\"'+ssidSelect+'\\"\n\tpsk=\\"'+pwdSelect+'\\"\n\tkey_mgmt=WPA-PSK\n}'
+                    os.system('echo "'+newkey+'" >> /etc/wpa_supplicant/wpa_supplicant.conf')
+                    #asdf
+                    
+                    os.system('/etc/init.d/networking restart')
+                    os.system('systemctl daemon-reload')
+                    connected=False
+                    ctime=time.time()
+                    ctxt='Connecting'
+                    while not connected and time.time()<ctime+7:
+                        ctxt+='.'
+                        connect=status_font.render(ctxt,1,(64,108,160))
+                        screen.blit(trends,(0,0))
+                        screen.blit(connect, (300, 200))
+                        pygame.display.update()
+                        os.system('ping -c1 google.com > '+abspath+'var/ping_result')
+                        pingres=printer.fin('ping_result')
+                        connected=("unknown host" not in pingres and pingres!='')
+                        time.sleep(.5)
+                    
+                    if connected: result="Connected :D"
+                    else: result="I couldn't connect :|"
+                    
+                    connect=status_font.render(result,1,(64,108,160))
+                    screen.blit(trends,(0,0))
+                    screen.blit(connect, (400-connect.get_rect().width/2, 200))
+                    pygame.display.update()
+                    time.sleep(2)
+                    #do the wpa_conf thing
+                    
+                    wifiscreen=False
+                    printer.fout('wifiscreen',str(wifiscreen))
+                    
+                else:
+                    ssid=default_font.render('(Wireless Network)',1,(64,108,160))
+                    stage.blit(ssid, (400-ssid.get_rect().width/2, 90))
+                    net=status_font.render(ssidSelect,1,(128,203,224))
+                    stage.blit(net, (400-net.get_rect().width/2, 50))
+                    
+                    pwd=default_font.render('(Password)',1,(64,108,160))
+                    stage.blit(pwd, (400-pwd.get_rect().width/2, 190))
+            even=True #render every frame
+                
         if runtimescreen:
             if on_back and go:
                 if r1screen or r2screen or r3screen:
@@ -1371,6 +1628,8 @@ while alive:
         if changed>0: screen.blit(stage,(0,0))
         tfade=1
         tlights=False
+        
+        old_phase=phase
         if floatInProgress:
             tfade=0
             tlights=True
@@ -1378,7 +1637,6 @@ while alive:
             status_str="SHOWER"
             
             if floatelapsed/60>min_shower:
-                if phase!=PHASE_FADE1: lightMode=False
                 phase=PHASE_FADE1
                 status_str="FADE"
                 tfade=(floatelapsed/60-min_shower)/min_fade1
@@ -1386,7 +1644,6 @@ while alive:
             
             if floatelapsed/60>min_shower+min_fade1: 
                 tlights=False
-                if phase!=PHASE_FLOAT: lightMode=False
                 phase=PHASE_FLOAT
                 status_str="FLOAT"
             
@@ -1398,7 +1655,6 @@ while alive:
                 if tfade<0: tfade=0
             
             if floatelapsed/60>min_shower+(min_fade1+min_fade2)+min_float: 
-                if phase!=PHASE_WAIT: lightMode=True
                 phase=PHASE_WAIT
                 status_str="SHOWER"
                 
@@ -1425,13 +1681,15 @@ while alive:
                                                 
         else:
             tlights=True
-            if phase!=PHASE_NONE: lightMode=True
             phase=PHASE_NONE
             status_str="READY"
             tfade=fade
             if tfade>0: tfade-=.01
             if tfade<0: tfade=0
         #set the actual fade just once! otherwise every so often the other thread will call on it before it is prepared ;)
+        
+        if old_phase!=phase and phase==PHASE_FADE1: lightMode=False
+        if old_phase!=phase and (phase==PHASE_NONE or phase==PHASE_SHOWER or phase==PHASE_WAIT): lightMode=True
         
         if not playfloat: floatInProgress=False
         if not floatInProgress: floatstart=time.time()
@@ -1457,7 +1715,7 @@ while alive:
         #    #amber.set_alpha(DIM*255)
         #    #screen.blit(amber,(0,0))
         
-        if sleepMode:
+        if not lightMode:
             #tlights=False
             if tfade<1: tfade+=.1
             if tfade>1: tfade=1
@@ -1482,8 +1740,11 @@ while alive:
         if int(1+min_float+min_fade1+min_fade2)==23: floatelapsed=(time.time()-floatstart)*1+60*(min_shower+1*min_fade1+min_float)-5
         #================ ================ ================ ================ ================ 
         
-        debug = default_font.render(debugstring,1,(90,90,78))
-        screen.blit(debug, (55, 400))
+        debug = default_font.render(debugstring,1,(190,190,178))
+        screen.blit(debug, (55, 50))
+        
+        #debug = default_font.render(debugstring,1,(90,90,78))
+        #screen.blit(debug, (55, 400))
         
         #================ ACTUALLY DRAW TARGET ZONES FOR TESTING ======================
         #pygame.draw.rect(screen, (0, 0, 0),exit_button, 2)    
@@ -1501,6 +1762,7 @@ while alive:
 
         #pygame.draw.rect(screen, (100,0,0),therm_button, 2)
         #pygame.draw.rect(screen, (0,100,0),runtime_button, 2)
+        #pygame.draw.rect(screen, (0,100,0),wifi_button, 2)
         #pygame.draw.rect(screen, (100,0,0),trends_button, 2)
         #pygame.draw.rect(screen, (100,0,0),levels_button, 2)
         
@@ -1534,10 +1796,11 @@ while alive:
         #pygame.display.flip()
 
         t= (time.time()>lastLog+60*60) #update once an hour
-        if (time.time()>lastInit+30): init=True
+        if (time.time()>lastInit+60): init=True
         
         #old0=(old_alertMode!=alertMode or old_lightMode!=lightMode)
-        old1=(old_sleepMode!=sleepMode or old_phase!=phase or old_t_offset!=t_offset)
+        #old1=(old_sleepMode!=sleepMode or old_phase!=phase or old_t_offset!=t_offset)
+        old1=(old_phase!=phase or old_t_offset!=t_offset)
         old2=(old_max_vol!=max_vol or old_targ_temp!=targ_temp_i)
         old3=(old_min_fade1!=min_fade1 or old_min_fade2!=min_fade2)
         old=(old1 or old2 or old3)
@@ -1550,8 +1813,8 @@ while alive:
             msg_obj={}
             #if init or old_alertMode!=alertMode: msg_obj["alertMode"]=alertMode
             #if init or old_lightMode!=lightMode: msg_obj["lightMode"]=lightMode
+            #if init or old_sleepMode!=sleepMode: msg_obj["sleepMode"]=sleepMode
             if init or old_phase    !=phase    : msg_obj["phase"    ]=phase
-            if init or old_sleepMode!=sleepMode: msg_obj["sleepMode"]=sleepMode
             if init or old_max_vol  !=max_vol  : msg_obj["max_vol"  ]=max_vol
             if init or old_t_offset !=t_offset:   msg_obj["t_offset"]=t_offset
             if init or old_targ_temp!=targ_temp_i:msg_obj["targ_temp"]=targ_temp_i
@@ -1568,61 +1831,13 @@ while alive:
             msg=json.dumps(msg_obj)                  
             if msg!="{}": client.send(msg)
             
-            if t:    
-                logMsg ="\n  cur_temp     : "+str(math.floor(cur_temp*10)/10)
-                logMsg+="\n  targ_temp    : "+str(math.floor(targ_temp*10)/10)
-                logMsg+="\n  pH_lev       : "+str(math.floor(pH_lev*10)/10)
-                logMsg+="\n  ORP_lev      : "+str(math.floor(ORP_lev))
-                logMsg+="\n  min_float    : "+str(min_float+(min_fade1+min_fade2))
-                logMsg+="\n  times        : "+timeleft_str
-                logMsg+="\n  phase        : "+dephaser()+" ("+str(phase)+")"
-                logMsg+="\n  fade         : "+str(math.floor(fade*100))+"%"
-                logMsg+="\n  p_user|alert : "+str(lightMode)+"|"+str(alertMode)
-                logMsg+="\n  p_heater1234 : "+p_heater1234 #temporary
-                logMsg+="\n  man_filter   : "+str(manualfilter)
-                logMsg+="\n  man_h2o2     : "+str(manualh2o2)
-                logMsg+="\n  max_vol      : "+str(math.floor(max_vol*100))+"%"
-                logMsg+="\n  mainscreen    : "+str(mainscreen and not floatscreen and not settingsscreen)
-                logMsg+="\n  floatscreen   : "+str(floatscreen and not settingsscreen and not levelsscreen)
-                logMsg+="\n  settingsscreen: "+str(settingsscreen and not levelsscreen and not runtimescreen and not trendsscreen)
-                logMsg+="\n  levelsscreen  : "+str(levelsscreen)
-                logMsg+="\n  runtimescreen : "+str(runtimescreen)
-                logMsg+="\n  trendsscreen  : "+str(trendsscreen)
-                logMsg+="\n============================================================================="
-                #printer.log(logMsg)
-                
-                remote=False
-                json_obj={
-                    'tname'        : tname,
-                    'temperature'  : thermoString,
-                    'cur_temp'     : math.floor(cur_temp*10)/10,
-                    'targ_temp'    : math.floor(targ_temp*10)/10,
-                    'pH_lev'       : math.floor(pH_lev*10)/10,
-                    'ORP_lev'      : math.floor(ORP_lev),
-                    'min_float'    : min_float+(min_fade1+min_fade2),
-                    'times'        : timeleft_str,
-                    'phase'        : status_str,
-                    'fade'         : str(math.floor(fade*100))+"%",
-                    'p_user_alert' : str(lightMode)+"|"+str(alertMode),
-                    'p_heater1234' : p_heater1234, #temporary
-                    'man_filter'   : manualfilter,
-                    'man_h2o2'     : manualh2o2,
-                    'max_vol'      : str(math.floor(max_vol*100))+"%",
-                    'custom_duration': math.floor(custom_duration),
-                    'playfloat'      : str(playfloat),
-                    'mainscreen'     : str(mainscreen and not floatscreen and not settingsscreen),
-                    'floatscreen'    : str(floatscreen and not settingsscreen and not levelsscreen),
-                    'settingsscreen' : str(settingsscreen and not levelsscreen and not runtimescreen and not trendsscreen),
-                    'levelsscreen'   : str(levelsscreen),
-                    'runtimescreen'  : str(runtimescreen),
-                    'trendsscreen'   : str(trendsscreen),
-                }          
+            #LOG!!!
             
-            old_lightMode=lightMode
-            old_alertMode=alertMode
-            old_phase=phase
+            #old_lightMode=lightMode
+            #old_alertMode=alertMode
+            #old_phase=phase
             old_fade=fade
-            old_sleepMode=sleepMode
+            #old_sleepMode=sleepMode
             old_manualfilter=manualfilter
             old_manualh2o2=manualh2o2
             old_max_vol=max_vol
@@ -1630,7 +1845,7 @@ while alive:
             old_t_offset=t_offset
             old_min_fade1=min_fade1
             old_min_fade2=min_fade2
-        
+            
 #=============================================================================================================================================================#
 
 printer.goodbye(myname,version)   
