@@ -79,7 +79,7 @@ gui_urls = [
 guiassets_urls = [
     'guiassets/bg.png',
     'guiassets/bglogo.png',
-    'guiassets/updating.png'
+    'guiassets/updating.png',
     'guiassets/kozgoxl.otf',
     ]
 guiassets_float_urls = [
