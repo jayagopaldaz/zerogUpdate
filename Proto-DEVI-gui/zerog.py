@@ -3,7 +3,7 @@
 
 mypi='gui'
 myname="zerog.py"
-version="v.a.1.20"
+version="v.a.1.22"
 abspath='/home/pi/Desktop/'
 
 #=============================================================================================================================================================#
@@ -52,6 +52,8 @@ cur_temp=0
 targ_temp=93.5
 pH_lev=7.0
 ORP_lev=200
+specgrav_lev=1.25
+lbssalt_lev=0
 p_heater1234="----"
 thermoString=""
 remote=False
@@ -76,6 +78,7 @@ phase=-3
 stopcount=False
 lightMode=True
 alertMode=False
+colorthereapymode=False
 timeleft_str="READY"
 wlanSorted=[]
 ssidSelect=False
@@ -112,6 +115,8 @@ fout_rt_max=False
 fout_rt_thresh=False
 fout_pH=False
 fout_ORP=False
+fout_specgrav=False
+fout_lbs=False
 custom_duration=120
 max_vol=.65
 overrideWarning=False
@@ -125,6 +130,11 @@ min_plo   =3
 min_phi   =20
 min_uv    =20
 min_h2o2  =1/60*10
+
+min_fade1_m =1
+min_fade2_m =1
+fadeinmusic=False
+
 totalDuration=-1
 countdown_num=3
 countdownstart=time.time()
@@ -154,20 +164,24 @@ manualh2o2        = False
 floatpreset       = -1
 filter_runtime    = 0
 
-min_fade1       = float(printer.fin('min_fade1'))
-min_fade2       = float(printer.fin('min_fade2'))
-floatstart      = float(printer.fin('floatstart'))
-custom_duration = float(printer.fin('custom_duration'))
-targ_temp       = float(printer.fin('targ_temp'))
-pH_lev          = float(printer.fin('pH_lev'))   
-ORP_lev         = float(printer.fin('ORP_lev'))  
-t_offset        = float(printer.fin('t_offset'))  
-filter_runtime  = float(printer.fin('filter_runtime'))
-uvbulb_runtime  = float(printer.fin('uvbulb_runtime'))
-rt_solution_start= float(printer.fin('rt_solution_start'))
-rt_filter_max   = float(printer.fin('rt_filter_max'))
-rt_uvbulb_max   = float(printer.fin('rt_uvbulb_max'))
-rt_solution_max = float(printer.fin('rt_solution_max'))
+min_fade1          = float(printer.fin('min_fade1'))
+min_fade2          = float(printer.fin('min_fade2'))
+min_fade1_m        = float(printer.fin('min_fade1_m'))
+min_fade2_m        = float(printer.fin('min_fade2_m'))
+floatstart         = float(printer.fin('floatstart'))
+custom_duration    = float(printer.fin('custom_duration'))
+targ_temp          = float(printer.fin('targ_temp'))
+pH_lev             = float(printer.fin('pH_lev'))   
+ORP_lev            = float(printer.fin('ORP_lev'))  
+specgrav_lev       = float(printer.fin('specgrav_lev'))  
+lbssalt_lev        = float(printer.fin('lbssalt_lev'))  
+t_offset           = float(printer.fin('t_offset'))  
+filter_runtime     = float(printer.fin('filter_runtime'))
+uvbulb_runtime     = float(printer.fin('uvbulb_runtime'))
+rt_solution_start  = float(printer.fin('rt_solution_start'))
+rt_filter_max      = float(printer.fin('rt_filter_max'))
+rt_uvbulb_max      = float(printer.fin('rt_uvbulb_max'))
+rt_solution_max    = float(printer.fin('rt_solution_max'))
 rt_filter_thresh   = float(printer.fin('rt_filter_thresh'))
 rt_uvbulb_thresh   = float(printer.fin('rt_uvbulb_thresh'))
 rt_solution_thresh = float(printer.fin('rt_solution_thresh'))
@@ -241,6 +255,7 @@ wifi     =pygame.image.load(abspath+'guiassets/settings/trends.png')
 runtime  =pygame.image.load(abspath+'guiassets/settings/runtime.png')
 rt_edit  =pygame.image.load(abspath+'guiassets/settings/rt_edit.png')
 trends   =pygame.image.load(abspath+'guiassets/settings/trends.png')
+check    =pygame.image.load(abspath+'guiassets/settings/check.png')
 
 blackout     =pygame.Surface((800,480))
 amber        =pygame.Surface((800,480))
@@ -276,7 +291,7 @@ alphaStep=5
 screens_BEGIN=screens_END=0
 
 #================================ BUTTON RECTANGLES ================================                
-exit_button      = pygame.Rect(0, 0, 20, 20)
+exit_button      = pygame.Rect(0, 0, 40, 40)
 
 sixtymin_button  = pygame.Rect(116, 204-vOffset, 140,140)
 ninetymin_button = pygame.Rect(322, 204-vOffset, 140,140)
@@ -306,12 +321,15 @@ clightin_button  = pygame.Rect(405, 130-vOffset, 245,100)
 clightout_button = pygame.Rect(405, 230-vOffset, 245,100)
 clength_button   = pygame.Rect(160, 360-vOffset, 245,100)
 ccol_button      = pygame.Rect(660,  55-vOffset,  95,390)
+ctherapy_button  = pygame.Rect(410, 370-vOffset,  76, 76)
 
 
-tcur_button      = pygame.Rect(115, 100-vOffset, 270,150)
-ttarg_button     = pygame.Rect(400, 100-vOffset, 270,150)
-pH_button        = pygame.Rect(115, 270-vOffset, 270,150)
-ORP_button       = pygame.Rect(400, 270-vOffset, 270,150)
+tcur_button      = pygame.Rect(155,  70-vOffset, 270,120)
+ttarg_button     = pygame.Rect(440,  70-vOffset, 270,120)
+pH_button        = pygame.Rect(155, 200-vOffset, 270,120)
+ORP_button       = pygame.Rect(440, 200-vOffset, 270,120)
+specgrav_button  = pygame.Rect(155, 330-vOffset, 270,120)
+lbssalt_button   = pygame.Rect(440, 330-vOffset, 270,120)
 
 #rt_total_button  = pygame.Rect(171, 79,480,60)
 rt_filter_button = pygame.Rect(71,149,680,44)
@@ -665,30 +683,45 @@ def runtimebars():
     stage.blit(rt_solution_text, (228+w,289+13))
     
 #-----------------------------------------------------------------
-def levelsbars(cur,targ,pH,ORP):
+def levelsbars(cur,targ,pH,ORP,sg,ls):
     curtext=str(math.floor(cur*10)/10)
     targtext=str(math.floor(targ*10)/10)
     pHtext=str(math.floor(pH*10)/10)
-    ORPtext=str(math.floor(ORP_lev))
-    cur=tankname_font.render(curtext,1,(28,103,124))
-    targ=tankname_font.render(targtext,1,(28,103,124))
-    pH=tankname_font.render(pHtext,1,(28,103,124))
-    ORP=tankname_font.render(ORPtext,1,(28,103,124))
+    ORPtext=str(math.floor(ORP))
+    sgtext=str(math.floor(sg*100)/100)
+    lstext=str(math.floor(ls))
+    
+    cur  = tankname_font.render(curtext, 1,(28,103,124))
+    targ = tankname_font.render(targtext,1,(28,103,124))
+    pH   = tankname_font.render(pHtext,  1,(28,103,124))
+    ORP  = tankname_font.render(ORPtext, 1,(28,103,124))
+    sg   = tankname_font.render(sgtext,  1,(28,103,124))
+    ls   = tankname_font.render(lstext,  1,(28,103,124))
 
-    stage.blit(cur, (252-cur.get_rect().width/2, 130-vOffset))        
-    stage.blit(targ,(537-targ.get_rect().width/2,130-vOffset))        
-    stage.blit(pH,  (252-pH.get_rect().width/2,  310-vOffset))        
-    stage.blit(ORP, (537-ORP.get_rect().width/2, 310-vOffset))        
+    #(155,  70-vOffset, 270,120)
+    #(440,  70-vOffset, 270,120)
+    #(155, 200-vOffset, 270,120)
+    #(440, 200-vOffset, 270,120)
+    #(155, 330-vOffset, 270,120)
+    #(440, 330-vOffset, 270,120)
+    #asdf
+    stage.blit(cur, (290 -  cur.get_rect().width/2, 100-vOffset))        
+    stage.blit(targ,(575 - targ.get_rect().width/2, 100-vOffset))        
+    stage.blit(pH,  (290 -   pH.get_rect().width/2, 235-vOffset))        
+    stage.blit(ORP, (575 -  ORP.get_rect().width/2, 235-vOffset))        
+    stage.blit(sg,  (290 -   sg.get_rect().width/2, 360-vOffset))        
+    stage.blit(ls,  (575 -   ls.get_rect().width/2, 360-vOffset))        
 
 #-----------------------------------------------------------------
 def custombar(muin,mout,liin,lout,ldur):
     #asdf
+    if muin=='0' or muin=='0.0': muin=mout='Off'
     muin_=tankname_font.render(muin,1,(28,103,124))
     mout_=tankname_font.render(mout,1,(28,103,124))
     liin_=tankname_font.render(liin,1,(28,103,124))
     lout_=tankname_font.render(lout,1,(28,103,124))
     ldur_=tankname_font.render(ldur,1,(28,103,124))
-    #floatlength.set_alpha(alpha0)
+    
     stage.blit(muin_, (285-muin_.get_rect().width/2, 154-vOffset))        
     stage.blit(mout_, (285-mout_.get_rect().width/2, 254-vOffset))        
     stage.blit(liin_, (530-liin_.get_rect().width/2, 154-vOffset))        
@@ -725,9 +758,11 @@ def drawgradbar():
 
     totalDuration=min_shower+min_fade1+min_float+min_fade2+min_wait+min_plo+min_phi
     _shower =w/totalDuration*min_shower
-    _fade1   =w/totalDuration*min_fade1
+    _fade1  =w/totalDuration*min_fade1
+    _fade1m =w/totalDuration*min_fade1_m
     _float  =w/totalDuration*min_float
     _fade2  =w/totalDuration*min_fade2
+    _fade2m =w/totalDuration*min_fade2_m
     _wait   =w/totalDuration*min_wait
     _plo    =w/totalDuration*min_plo
     _filter =w/totalDuration*min_phi
@@ -741,42 +776,52 @@ def drawgradbar():
     c_g=colvals['colval_g']
     c_b=colvals['colval_b']
 
+    def byteclamp(n):
+        n=int(n)
+        if n<0: n=0
+        if n>255: n=255
+        return n
+
     for x in range(0,799):
         #THE GRADIENT
-        if x<_shower:                                                  _r=_g=_b=255#math.floor(255-    (x         )   /_shower*255)
-        if x>_shower and x<_shower+_fade1:                             _r=_g=_b=   math.floor(255-   (x-_shower     )    /_fade1*255)
-        if x>_shower+_fade1 and x<_shower+_fade1+_float:               _r=_g=_b=0#math.floor(255-  (x-_shower-_fade1   )     /_float*255)
-        if x>_shower+_fade1+_float and x<_shower+_fade1+_float+_fade2: _r=_g=_b= math.floor( 0 + (x-_shower-_fade1-_float)      /_fade2*255)
-        if x>_shower+_fade1+_float+_fade2:                             _r=_g=_b=255
-        if x>_shower+_fade1+_float+_fade2+_wait:      
-            _r= math.floor(255-(x-_shower-(_fade1+_fade2)-_float  ) /_filter*255 *4)
-            _g= math.floor(255-(x-_shower-(_fade1+_fade2)-_float  ) /_filter*255 *3)
-            _b= math.floor(255-(x-_shower-(_fade1+_fade2)-_float  ) /_filter*255 *2)
+        cth=(colorthereapymode)*196
+        
+        mus_y=1
+        if x>_shower: mus_y=1-(x-_shower)/(_fade1m+.0001)
+        if x>_shower+_fade1+_float+_fade2-_fade2m: mus_y=(x-_shower-_fade1-_float-_fade2+_fade2m)/(_fade2m+.0001)
+        if mus_y<0: mus_y=0
+        if mus_y>1: mus_y=1
+        if _fade1m<.1: mus_y=1
+        
+        if x<_shower: _r=_g=_b=255                                                                                                        #shower
+        if x>_shower and x<_shower+_fade1: _r=_g=_b=byteclamp(cth+(1-(x-_shower)/_fade1)*(255-cth))                                       #fade1
+        if x>_shower+_fade1 and x<_shower+_fade1+_float: _r=_g=_b=cth                                                                     #float
+        if x>_shower+_fade1+_float and x<_shower+_fade1+_float+_fade2: _r=_g=_b=byteclamp(cth+(x-_shower-_fade1-_float)/_fade2*(255-cth)) #fade2
+        if x>_shower+_fade1+_float+_fade2: _r=_g=_b=255                                                                                   #wait
+        if x>_shower+_fade1+_float+_fade2+_wait:                                                                                          #plo/hi
+            _r= byteclamp(255-(x-_shower-(_fade1+_fade2)-_float  ) /_filter*255 *4)
+            _g= byteclamp(255-(x-_shower-(_fade1+_fade2)-_float  ) /_filter*255 *3)
+            _b= byteclamp(255-(x-_shower-(_fade1+_fade2)-_float  ) /_filter*255 *2)
             if _r<0: _r=0
             if _g<0: _g=0
             if _b<0: _b=0
-            _r+=math.floor( 0 +(x-_shower-(_fade1+_fade2)-_float  ) / _filter*255)
-            _b+=math.floor( 0 +(x-_shower-(_fade1+_fade2)-_float  ) / _filter*255)
+            _r+=byteclamp( 0 +(x-_shower-(_fade1+_fade2)-_float  ) / _filter*255)
+            _b+=byteclamp( 0 +(x-_shower-(_fade1+_fade2)-_float  ) / _filter*255)
             if _r>255: _r=255
             if _g>255: _g=255
             if _b>255: _b=255
-            
-        def byteclamp(n):
-            n=int(n)
-            if n<0: n=0
-            if n>255: n=255
-            return n
-        
+                    
         if x<_shower+_fade1+_float+_fade2+_wait or True: 
-            _r=byteclamp(_r*(.6*c_r+.4))
-            _g=byteclamp(_g*(.6*c_g+.4))
-            _b=byteclamp(_b*(.6*c_b+.4))                
+            _r=byteclamp(_r*(.8*c_r+.2))
+            _g=byteclamp(_g*(.8*c_g+.2))
+            _b=byteclamp(_b*(.8*c_b+.2))
         else:
             _r=byteclamp(_r*(.3*c_r+.7))
             _g=byteclamp(_g*(.3*c_g+.7))
             _b=byteclamp(_b*(.3*c_b+.7))
             
         pygame.draw.line(gradsurface, (_r,_g,_b), (x,0),(x,h), 1)
+        pygame.draw.line(gradsurface, (byteclamp(8+1.5*_r),byteclamp(8+1.5*_g),byteclamp(8+1.5*_b),), (x,h-mus_y*h/2),(x,h), 1)
             
     pygame.draw.line(gradsurface, (0,0,0), (_shower,0),(_shower,h), 1)
     pygame.draw.line(gradsurface, (0,0,0), (_shower+_fade1+_float+_fade2,0),(_shower+_fade1+_float+_fade2,h), 1)
@@ -854,8 +899,10 @@ old_manualh2o2=manualh2o2
 old_max_vol=max_vol
 old_targ_temp=targ_temp_i=int(targ_temp*10)/10
 old_t_offset=t_offset
-old_min_fade1=min_fade1
-old_min_fade2=min_fade2
+#old_min_fade1=min_fade1
+#old_min_fade2=min_fade2
+#old_min_fade1_m=min_fade1_m
+#old_min_fade2_m=min_fade2_m
 
 mouseL=old_mouseL=0
 fout_ct_time=time.time()
@@ -931,10 +978,14 @@ while alive:
         on_clightout = clightout_button.collidepoint(pos)
         on_clength   =   clength_button.collidepoint(pos)
         on_ccol      =      ccol_button.collidepoint(pos)
+        on_ctherapy  =  ctherapy_button.collidepoint(pos)
+        
         on_tcur      =      tcur_button.collidepoint(pos)
         on_ttarg     =     ttarg_button.collidepoint(pos)
         on_pH        =        pH_button.collidepoint(pos)
         on_ORP       =       ORP_button.collidepoint(pos)
+        on_specgrav  =  specgrav_button.collidepoint(pos)
+        on_lbssalt   =   lbssalt_button.collidepoint(pos)
         
         on_rt_filter = rt_filter_button.collidepoint(pos)
         on_rt_uvbulb = rt_uvbulb_button.collidepoint(pos)
@@ -1032,6 +1083,11 @@ while alive:
             if customscreen:
                 layer0=custom
                 #asdf
+                if on_ctherapy and go and not mlock: 
+                    colorthereapymode=not colorthereapymode
+                    client.send(json.dumps({"colorthereapymode":colorthereapymode}))
+                    reloaded=True
+    
                 if on_ccol and go and not mlock:
                     hpos=-.15+1/.75*(pos[0]-ccol_button.left)/(ccol_button.width-20)
                     vpos=-.05+1/.9*(pos[1]-ccol_button.top)/ccol_button.height
@@ -1053,44 +1109,56 @@ while alive:
                     printer.fout('colvals',colvals_)
                     reloaded=True
 
+                #i mistakenly made IN and OUT reversed on all of these. 
+                #they work but the naming is backwards. oops. 
+                #fix it in so many places when i refactor the GUI (etc)
+                
                 #CUSTOM MUSIC FADEIN--------------------------------
                 if on_cmusicin and mouseL and not mlock:
                     stepper=(pos[0]-cmusicin_button.left) / cmusicin_button.width - .5
-                    if stepper<0 and stepperSpeed==0: min_fade1-=.1
-                    if stepper>0 and stepperSpeed==0: min_fade1+=.1
-                    if stepper<0: min_fade1-=stepperSpeed
-                    if stepper>0: min_fade1+=stepperSpeed
+                    if stepper<0 and stepperSpeed==0: min_fade1_m-=.1
+                    if stepper>0 and stepperSpeed==0: min_fade1_m+=.1
+                    if stepper<0: min_fade1_m-=stepperSpeed
+                    if stepper>0: min_fade1_m+=stepperSpeed
                     if  stepperSpeed<.5: stepperSpeed+=.01
                     elif stepperSpeed<2: stepperSpeed*=1.08
-                    if min_fade1<0: min_fade1=0
-                    if min_fade1>999: min_fade1=999
+                    if min_fade1_m<0: min_fade1_m=0
+                    if min_fade1_m>999: min_fade1_m=999
+                    if min_fade1_m+min_fade2_m>custom_duration:
+                        if min_fade1_m>custom_duration: min_fade1_m=custom_duration
+                        min_fade2_m=custom_duration-min_fade1_m
                     fout_customMFadein=True
                 elif fout_customMFadein:
-                    printer.fout('min_fade1',str(min_fade1))
-                    if custom_duration<(min_fade1+min_fade2): custom_duration=(min_fade1+min_fade2)
+                    printer.fout('min_fade1_m',str(min_fade1_m))
+                    printer.fout('min_fade2_m',str(min_fade2_m))
                     fout_customDuration=True
                     fout_customMFadein=False
                     reloaded=True
+                    client.send(json.dumps({"fade1_music":round(min_fade1_m,1)}))
                 elif on_cmusicin: stepperSpeed=0
 
                 #CUSTOM MUSIC FADEOUT--------------------------------
                 if on_cmusicout and mouseL and not mlock:
                     stepper=(pos[0]-cmusicout_button.left) / cmusicout_button.width - .5
-                    if stepper<0 and stepperSpeed==0: min_fade2-=.1
-                    if stepper>0 and stepperSpeed==0: min_fade2+=.1
-                    if stepper<0: min_fade2-=stepperSpeed
-                    if stepper>0: min_fade2+=stepperSpeed
+                    if stepper<0 and stepperSpeed==0: min_fade2_m-=.1
+                    if stepper>0 and stepperSpeed==0: min_fade2_m+=.1
+                    if stepper<0: min_fade2_m-=stepperSpeed
+                    if stepper>0: min_fade2_m+=stepperSpeed
                     if  stepperSpeed<.5: stepperSpeed+=.01
                     elif stepperSpeed<2: stepperSpeed*=1.08
-                    if min_fade2<0: min_fade2=0
-                    if min_fade2>999: min_fade2=999
+                    if min_fade2_m<0: min_fade2_m=0
+                    if min_fade2_m>999: min_fade2_m=999
+                    if min_fade1_m+min_fade2_m>custom_duration:
+                        if min_fade2_m>custom_duration: min_fade2_m=custom_duration
+                        min_fade1_m=custom_duration-min_fade2_m
                     fout_customMFadeout=True
                 elif fout_customMFadeout:
-                    printer.fout('min_fade2',str(min_fade2))
-                    if custom_duration<(min_fade1+min_fade2): custom_duration=(min_fade1+min_fade2)
+                    printer.fout('min_fade1_m',str(min_fade1_m))
+                    printer.fout('min_fade2_m',str(min_fade2_m))
                     fout_customDuration=True
                     fout_customMFadeout=False
                     reloaded=True
+                    client.send(json.dumps({"fade2_music":round(min_fade2_m,1)}))
                 elif on_cmusicout: stepperSpeed=0
 
                 #CUSTOM LIGHT FADEIN--------------------------------
@@ -1111,6 +1179,7 @@ while alive:
                     fout_customDuration=True
                     fout_customLFadein=False
                     reloaded=True
+                    client.send(json.dumps({"fade1_light":round(min_fade1,1)}))
                 elif on_clightin: stepperSpeed=0
 
                 #CUSTOM LIGHT FADEOUT--------------------------------
@@ -1131,6 +1200,7 @@ while alive:
                     fout_customDuration=True
                     fout_customLFadeout=False
                     reloaded=True
+                    client.send(json.dumps({"fade2_light":round(min_fade2,1)}))
                 elif on_clightout: stepperSpeed=0
 
 
@@ -1342,6 +1412,38 @@ while alive:
                     fout_ORP=False
                 elif not mouseL: stepperSpeed=0
             
+                if on_specgrav and mouseL:
+                    stepper=(pos[0]-specgrav_button.left) / specgrav_button.width - .5
+                    if stepper<0 and stepperSpeed==0: specgrav_lev-=.01
+                    if stepper>0 and stepperSpeed==0: specgrav_lev+=.01
+                    if stepper<0: specgrav_lev-=stepperSpeed*.06
+                    if stepper>0: specgrav_lev+=stepperSpeed*.06
+                    if  stepperSpeed<.5: stepperSpeed+=.02
+                    elif stepperSpeed<1: stepperSpeed*=1.1
+                    if specgrav_lev<0: specgrav_lev=0
+                    if specgrav_lev>4: specgrav_lev=14
+                    fout_specgrav=True
+                elif fout_specgrav:
+                    printer.fout('specgrav_lev',str(specgrav_lev))
+                    fout_specgrav=False
+                elif not mouseL: stepperSpeed=0
+
+                if on_lbssalt and mouseL:
+                    stepper=(pos[0]-lbssalt_button.left) / lbssalt_button.width - .5
+                    if stepper<0 and stepperSpeed==0: lbssalt_lev-=1
+                    if stepper>0 and stepperSpeed==0: lbssalt_lev+=1
+                    if stepper<0: lbssalt_lev-=stepperSpeed
+                    if stepper>0: lbssalt_lev+=stepperSpeed
+                    if stepperSpeed<.5: stepperSpeed+=.1
+                    elif stepperSpeed<4: stepperSpeed*=1.1
+                    if lbssalt_lev<0: lbssalt_lev=0
+                    if lbssalt_lev>4000: lbssalt_lev=4000                        
+                    fout_lbs=True
+                elif fout_lbs:
+                    printer.fout('lbssalt_lev',str(lbssalt_lev))
+                    fout_lbs=False
+                elif not mouseL: stepperSpeed=0
+            
             
             #============================================================================
             #                            FLOATSCREEN
@@ -1353,14 +1455,23 @@ while alive:
                 layer0=play
              
                 if not manualfilter and not manualh2o2:
-                    if on_play and go: prog=0
-                    if on_play and go: floatstart=time.time()
-                    if on_play and go: floatInProgress=True
-                    if on_play and go: printer.fout('floatstart',str(floatstart))
-                    if on_play and go: printer.fout('floatInProgress',str(floatInProgress))
-                    
-                    if on_play and go: playfloat=True 
-                    if on_play and go: printer.fout('playfloat',str(playfloat))
+                    if on_play and go: 
+                        prog=0
+                        floatstart=time.time()
+                        floatInProgress=True
+                        printer.fout('floatstart',str(floatstart))
+                        printer.fout('floatInProgress',str(floatInProgress))
+                        playfloat=True 
+                        fadeinmusic=False
+                        printer.fout('playfloat',str(playfloat))
+                        msg_obj={
+                            "fade1_light":round(min_fade1,1),
+                            "fade2_light":round(min_fade2,1),
+                            "fade1_music":round(min_fade1_m,1),
+                            "fade2_music":round(min_fade2_m,1),
+                            "colorthereapymode":colorthereapymode                            
+                            }
+                        client.send(json.dumps(msg_obj))
 
                     if on_stop and go: countdownstart=time.time()                            
                     if on_stop and mouseL and playfloat:
@@ -1436,7 +1547,6 @@ while alive:
             stopcount=False
             countdown_num=3
             countdownstart=time.time()
-
         
         if changed>0 and layer0: stage.blit(layer0,(0,0))
         if changed>0 and oldTarg1 and exScr: stage.blit(oldTarg1,(153,42))
@@ -1611,20 +1721,21 @@ while alive:
         if levelsscreen:
             if on_back and go: levelsscreen=False
             if on_back and go: printer.fout('levelsscreen',str(levelsscreen))
-            levelsbars(ct,targ_temp,pH_lev,ORP_lev)
+            levelsbars(ct,targ_temp,pH_lev,ORP_lev,specgrav_lev,lbssalt_lev)
 
         if customscreen:                
             #debugstring="cust"
             if on_back and go: customscreen=False
             if on_back and go: printer.fout('customscreen',str(customscreen))                
             custombar(
-                str(round(min_fade1,1)),
-                str(round(min_fade2,1)),
+                str(round(min_fade1_m,1)),
+                str(round(min_fade2_m,1)),
                 str(round(min_fade1,1)),
                 str(round(min_fade2,1)),
                 str(math.floor(custom_duration)))
             #asdf
-                
+            if colorthereapymode: stage.blit(check,(424, 381-vOffset))
+            
         if changed>0: screen.blit(stage,(0,0))
         tfade=1
         tlights=False
@@ -1654,15 +1765,19 @@ while alive:
                 tfade=1-(floatelapsed/60-(min_shower+min_fade1+min_float))/min_fade2
                 if tfade<0: tfade=0
             
-            if floatelapsed/60>min_shower+(min_fade1+min_fade2)+min_float: 
+            if floatelapsed/60>min_shower+min_fade1+min_float+min_fade2-min_fade2_m: 
+                if not fadeinmusic: client.send(json.dumps({"fadeinmusic":fadeinmusic}))
+                fadeinmusic=True
+                
+            if floatelapsed/60>min_shower+min_fade1+min_float+min_fade2: 
                 phase=PHASE_WAIT
                 status_str="SHOWER"
                 
-            if floatelapsed/60>min_shower+(min_fade1+min_fade2)+min_float+min_wait: 
+            if floatelapsed/60>min_shower+min_fade1+min_float+min_fade2+min_wait: 
                 phase=PHASE_PLO
                 status_str="FILTER"
             
-            if floatelapsed/60>min_shower+(min_fade1+min_fade2)+min_float+min_wait+min_plo: 
+            if floatelapsed/60>min_shower+min_fade1+min_float+min_fade2+min_wait+min_plo: 
                 phase=PHASE_PHI
                 if floatelapsed/60<min_shower+(min_fade1+min_fade2)+min_float+min_wait+min_plo+min_uv: phase+=PHASE_UV
                 if floatelapsed/60<min_shower+(min_fade1+min_fade2)+min_float+min_wait+min_plo+min_h2o2: phase+=PHASE_H2O2
@@ -1747,7 +1862,7 @@ while alive:
         #screen.blit(debug, (55, 400))
         
         #================ ACTUALLY DRAW TARGET ZONES FOR TESTING ======================
-        #pygame.draw.rect(screen, (0, 0, 0),exit_button, 2)    
+        pygame.draw.rect(screen, (0, 0, 0),exit_button, 2)    
 
         #pygame.draw.rect(screen, (100,0,0),sixtymin_button, 2)
         #pygame.draw.rect(screen, (0,100,0),ninetymin_button, 2)
@@ -1777,11 +1892,14 @@ while alive:
         #pygame.draw.rect(screen, (0,100,0),clightout_button, 2)
         #pygame.draw.rect(screen, (0,100,0),clength_button, 2)
         #pygame.draw.rect(screen, (0,100,0),ccol_button, 2)
+        #pygame.draw.rect(screen, (0,100,0),ctherapy_button, 2)
 
         #pygame.draw.rect(screen, (100,0,0),tcur_button, 2)
         #pygame.draw.rect(screen, (0,100,0),ttarg_button, 2)
         #pygame.draw.rect(screen, (0,0,100),pH_button, 2)
         #pygame.draw.rect(screen, (0,100,0),ORP_button, 2)
+        #pygame.draw.rect(screen, (0,0,100),specgrav_button, 2)
+        #pygame.draw.rect(screen, (0,0,100),lbssalt_button, 2)
 
         #pygame.draw.rect(screen, (100,0,0),rt_filter_button, 2)
         #pygame.draw.rect(screen, (100,0,0),rt_uvbulb_button, 2)
@@ -1801,27 +1919,23 @@ while alive:
         #old0=(old_alertMode!=alertMode or old_lightMode!=lightMode)
         #old1=(old_sleepMode!=sleepMode or old_phase!=phase or old_t_offset!=t_offset)
         old1=(old_phase!=phase or old_t_offset!=t_offset)
-        old2=(old_max_vol!=max_vol or old_targ_temp!=targ_temp_i)
-        old3=(old_min_fade1!=min_fade1 or old_min_fade2!=min_fade2)
-        old=(old1 or old2 or old3)
+        old2=((old_max_vol!=max_vol and time.time()>lastsend+.2) or old_targ_temp!=targ_temp_i)
+        #old3=(old_min_fade1!=min_fade1 or old_min_fade2!=min_fade2)
+        #old4=(old_min_fade1_m!=min_fade1_m or old_min_fade2_m!=min_fade2_m)
+        old=(old1 or old2)# or old3 or old4)
 
         misc=(mouseL!=old_mouseL or remote)
         faded= (fade!=old_fade and (fade==0 or fade==1) and not go)
         
-        if (t or go or old or misc or faded or init) and time.time()>lastsend+.15:
+        if (t or go or old or misc or faded or init):
             lastsend=time.time()
             msg_obj={}
-            #if init or old_alertMode!=alertMode: msg_obj["alertMode"]=alertMode
-            #if init or old_lightMode!=lightMode: msg_obj["lightMode"]=lightMode
-            #if init or old_sleepMode!=sleepMode: msg_obj["sleepMode"]=sleepMode
-            if init or old_phase    !=phase    : msg_obj["phase"    ]=phase
-            if init or old_max_vol  !=max_vol  : msg_obj["max_vol"  ]=max_vol
-            if init or old_t_offset !=t_offset:   msg_obj["t_offset"]=t_offset
-            if init or old_targ_temp!=targ_temp_i:msg_obj["targ_temp"]=targ_temp_i
-            if init or old_min_fade1!=min_fade1:  msg_obj["fade1"]=round(min_fade1,1)
-            if init or old_min_fade2!=min_fade2:  msg_obj["fade2"]=round(min_fade2,1)
-            if init or old_manualh2o2  !=manualh2o2:   msg_obj["h2o2"  ]=manualh2o2
-            if init or old_manualfilter!=manualfilter: msg_obj["filter"]=manualfilter                
+            if init or        old_phase!=phase:        msg_obj["phase"]       = phase
+            if init or      old_max_vol!=max_vol:      msg_obj["max_vol"]     = max_vol
+            if init or     old_t_offset!=t_offset:     msg_obj["t_offset"]    = t_offset
+            if init or    old_targ_temp!=targ_temp_i:  msg_obj["targ_temp"]   = targ_temp_i
+            if init or   old_manualh2o2!=manualh2o2:   msg_obj["h2o2"]        = manualh2o2
+            if init or old_manualfilter!=manualfilter: msg_obj["filter"]      = manualfilter                
             
             if init:
                 msg_obj["reinit"]=True
@@ -1843,9 +1957,14 @@ while alive:
             old_max_vol=max_vol
             old_targ_temp=targ_temp_i
             old_t_offset=t_offset
-            old_min_fade1=min_fade1
-            old_min_fade2=min_fade2
+            #old_min_fade1=min_fade1
+            #old_min_fade2=min_fade2
+            #old_min_fade1_m=min_fade1_m
+            #old_min_fade2_m=min_fade2_m
             
 #=============================================================================================================================================================#
 
-printer.goodbye(myname,version)   
+pygame.quit()
+printer.goodbye(myname,version)
+print('ended')
+exit(0)
