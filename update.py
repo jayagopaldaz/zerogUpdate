@@ -95,6 +95,9 @@ guiassets_main_urls = [
     'guiassets/main/nonemin.png'
     ]
 guiassets_settings_urls = [
+    'guiassets/settings/audio.png',
+    'guiassets/settings/blank.png',
+    'guiassets/settings/check.png',
     'guiassets/settings/custom.png',
     'guiassets/settings/filter.png',
     'guiassets/settings/h2o2.png',

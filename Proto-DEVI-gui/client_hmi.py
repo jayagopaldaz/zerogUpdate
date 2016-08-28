@@ -18,7 +18,7 @@ pending=False
 
 def send(d):
     global dat,pending
-    print('client sending: '+d)
+    if 'reinit' not in d: print('client sending: '+d)
     dat=bytes(d,'UTF-8')
     pending=True
     

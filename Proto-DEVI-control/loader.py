@@ -16,7 +16,8 @@ def c():
         time.sleep(5)
 def l():
     while True:
-        call(['python3',abspath+'LED.py'])
+        #call(['python3',abspath+'LED.py'])
+        call(['idle3','-r',abspath+'LED.py'])
         time.sleep(5)
 def u():    
     while True:

@@ -3,7 +3,7 @@
 
 mypi='control'
 myname="unabstractor.py"
-version="v.a.1.20"
+version="v.a.1.40"
 abspath='/home/pi/Desktop/'
 
 #=============================================================================================================================================================#
@@ -12,7 +12,6 @@ import time
 import math
 import subprocess
 import os
-import pygame
 import vlc
 import random
 import json
@@ -27,7 +26,9 @@ import globalvars as glb
 printer.hello(myname,version)
 print(myname+', '+version)
 
+hmi_ip=0
 def socketboot():
+    global hmi_ip
     import mdns_control as mdns
     hmi_ip=(mdns.info.properties[b'eth0']).decode('utf-8')
     my_ip=mdns.ip
@@ -46,7 +47,12 @@ init=True
 quickLight=3
 fade1Light=60
 fade2Light=60
+fade1Music=60
+fade2Music=60
+nomusicfade=False
+
 music = 0
+vlc_i=0
 lastPrint=-30
 pdelay=12
 tick=0
@@ -68,6 +74,7 @@ faded_out=False
 unfaded=False
 lightMode=not False #inverted for faster on (slower off)
 alertMode=False
+colorthereapymode=False
 
 fthermo=0
 session_60=True
@@ -399,7 +406,7 @@ def heaterString():
 def musicThread():
     OOO="                                                                                                                         "
     printer.p(OOO+"musicThread === checking in...")    
-    global music,alive,new_max_vol
+    global music,vlc_i,alive,new_max_vol
     global volume,volume_base,volume_targ,volume_time,volume_dur
     
     try:
@@ -410,7 +417,10 @@ def musicThread():
         print('amp init exception')
         noAmp=True
 
-    music=vlc.MediaPlayer("file://"+abspath+"default.mp3")
+    vlc_i=vlc.Instance()
+    music=vlc_i.media_player_new()
+    music.set_media(vlc_i.media_new(abspath+"default.mp3"))
+    
     printer.p(OOO+"musicThread === entering circuit...")    
     old_ampvol=ampvol=0
     while alive:
@@ -421,12 +431,13 @@ def musicThread():
         while mstate == "State.Opening": mstate=str(music.get_state())
         while mstate == "State.Playing" or mstate == "State.Paused":
             mstate=str(music.get_state())
-            if volume==0 and mstate=="State.Playing":
+            if volume==0 and mstate=="State.Playing" and not auxaudio:
                 print('pause') 
                 music.pause()
-            if volume!=0 and mstate=="State.Paused":
+            if volume!=0 and mstate=="State.Paused" and not auxaudio:
                 print('unpause')
                 music.pause()
+            if mstate=="State.Playing" and auxaudio: music.pause()
                 
             vd=volume_dur*1.2
             vgap=(volume_targ-volume_base)
@@ -453,74 +464,109 @@ def musicThread():
     
 #--------------------------------------------------------
 def setLED(l,v):
-    global volume,volume_base,volume_targ,volume_time,volume_dur,lightMode
+    global lightMode
     print('setLED === lum:'+str(l)+", vel:"+str(v))
     if l==100: lightMode=True
     if l==0: lightMode=False
+    if v==0: v=.001
+    if l!='alert' and l!='safe': l=int(l)
     printer.fout('targ_lum',str(l))
-    printer.fout('targ_lum_vel',str(v))
-    printer.fout('targ_lum_time',str(time.time()))
-    if l!='alert' and l!='safe':
-        volume_base=volume
-        volume_targ=l/100
-        volume_time=time.time()
-        volume_dur=v
-    #setMusic : fade1Music fade2Music
+    printer.fout('targ_lum_vel',str(int(v)))
+    #printer.fout('targ_lum_time',str(time.time()))
+    
+def setMusic(l,v):
+    global volume,volume_base,volume_targ,volume_time,volume_dur
+    if nomusicfade: 
+        l=100
+        v=.001
+    print('setMusic === volume:'+str(l)+", m_vel:"+str(v))
+    volume_base=volume
+    volume_targ=l/100
+    volume_time=time.time()
+    volume_dur=v
     
     
 #--------------------------------------------------------
 #                      SERVER STUFF
 #--------------------------------------------------------
+def setlm(ll,vl,lm,vm):
+    setLED(ll,vl)
+    setMusic(lm,vm)
+                
+auxaudio=False
 def getserverupdates():
-    global init
-    #global sleepMode,
-    global new_max_vol,lightMode
-    global alive
+    global alive, init, auxaudio
+    global new_max_vol,lightMode,colorthereapymode
+    global fade1Light,fade2Light,fade1Music,fade2Music,nomusicfade
 
-    try:
-        while alive:
+    while alive:
+        if True:
             if server.data!='':
                 if server.data=='reboot': os.system('reboot')
                 if "reinit" not in server.data: print('unabstractor === serverdata:'+str(server.data))
-                
-                try: j=json.loads(server.data)
-                except: print('json exception@getserverupdates')
-                
-                server.data='' #used it up ;)
-                jk=j.keys()
-                
-                if 'colvals' in jk: printer.fout('colvals',str(j['colvals']))
-                if 'phase' in jk:
-                    if glb.phase!=int(j['phase']):                    
-                        glb.phase=int(j['phase'])
-                        if glb.phase==glb.PHASE_NONE: setLED(100,quickLight)
-                        if glb.phase==glb.PHASE_FADE1: setLED(0,fade1Light)
-                        if glb.phase==glb.PHASE_FLOAT: setLED(0,quickLight)
-                        if glb.phase==glb.PHASE_FADE2: setLED(100,fade2Light)
-                        if glb.phase>glb.PHASE_FADE2: setLED(100,quickLight)        
-                if 'h2o2' in jk: glb.manualh2o2=bool(j['h2o2'])
-                if 'filter' in jk: glb.manualfilter=bool(j['filter'])
-                if 'targ_temp' in jk: glb.targ_temp=float(j['targ_temp'])
-                if 't_offset' in jk: glb.t_offset=float(j['t_offset'])                            
-                if 'fade1' in jk: fade1Light=fade1Music=60*float(j['fade1'])                                           
-                if 'fade2' in jk: fade2Light=fade1Music=60*float(j['fade2'])
-                if 'max_vol' in jk:
-                    glb.max_vol=float(j['max_vol'])
-                    printer.fout('max_vol',str(glb.max_vol))
-                    new_max_vol=True
-                if 'lightMode' in jk:                           
-                    #lightMode_=bool(j['lightMode'])
-                    #if lightMode!=lightMode_:
-                    #    lightMode=lightMode_
-                    #    if lightMode: setLED(100,quickLight)
-                    #    else: setLED(0,quickLight)
-                    #    #elif glb.phase!=glb.PHASE_FLOAT: setLED(100,quickLight)
-                    lightMode=bool(j['lightMode'])
-                    if lightMode: setLED(100,quickLight)
-                    else: setLED(0,quickLight)
+                #try: 
+                if True:
+                    j=json.loads(server.data)
+                    jk=j.keys()
+                    server.data='' #used it up ;)
                     
-            time.sleep(.1)
-    except: print('serverupdate reboot')
+                    if 'fileget' in jk: 
+                        os.system('wget -O '+j['fileget']+' http://'+hmi_ip+':8000/temp')
+                        music.set_media(vlc_i.media_new(abspath+'usb.mp3'))
+                        client.send(json.dumps({'filegotten':True}))
+                    if 'audiomode' in jk:
+                        if j['audiomode']==0: 
+                            auxaudio=False
+                            music.set_media(vlc_i.media_new(abspath+'default.mp3'))
+                        if j['audiomode']==1: 
+                            auxaudio=False
+                            music.set_media(vlc_i.media_new(abspath+'usb.mp3'))
+                        if j['audiomode']==2:
+                            if str(music.get_state())=="State.Playing": 
+                                auxaudio=True
+                                
+                            #and str(music.get_state())=="State.Playing": music.pause() 
+                            #music.set_media(vlc_i.media_new(abspath+'default.mp3'))
+                        
+                    if 'colvals' in jk: printer.fout('colvals',str(j['colvals']))
+                    if 'phase' in jk:
+                        if glb.phase!=int(j['phase']):
+                            lum_=0+colorthereapymode*100
+                            fade1Light_=colorthereapymode+(not colorthereapymode)*fade1Light
+                            glb.phase=int(j['phase'])
+                            if glb.phase==glb.PHASE_NONE:   setlm(100, quickLight, 100,quickLight)                            
+                            if glb.phase==glb.PHASE_SHOWER: setlm(100, quickLight, 100,quickLight)                            
+                            if glb.phase==glb.PHASE_FADE1:  setlm(lum_,fade1Light_,  0,fade1Music)
+                            if glb.phase==glb.PHASE_FLOAT:  setlm(lum_,quickLight,   0,quickLight)
+                            if glb.phase==glb.PHASE_FADE2:  setLED(100,fade2Light) #music set below
+                            if glb.phase==glb.PHASE_WAIT:   setlm(100, quickLight, 100,quickLight)
+                    if 'fadeinmusic' in jk: setMusic(100,fade2Music)
+                    if 'fade1_light' in jk: fade1Light=60*float(j['fade1_light'])                                           
+                    if 'fade2_light' in jk: fade2Light=60*float(j['fade2_light'])
+                    if 'fade1_music' in jk: fade1Music=60*float(j['fade1_music'])
+                    if 'fade2_music' in jk: fade2Music=60*float(j['fade2_music'])
+
+                    if 'h2o2' in jk: glb.manualh2o2=bool(j['h2o2'])
+                    if 'filter' in jk: glb.manualfilter=bool(j['filter'])
+                    if 'targ_temp' in jk: glb.targ_temp=float(j['targ_temp'])
+                    if 't_offset' in jk: glb.t_offset=float(j['t_offset'])                            
+                    
+                    if 'max_vol' in jk:
+                        glb.max_vol=float(j['max_vol'])
+                        printer.fout('max_vol',str(glb.max_vol))
+                        new_max_vol=True
+                        
+                    if 'colorthereapymode' in jk: colorthereapymode=bool(j['colorthereapymode'])
+                    if 'lightMode' in jk:                           
+                        lightMode=bool(j['lightMode'])
+                        if lightMode: setlm(100,quickLight,100,quickLight)
+                        else:         setlm(  0,quickLight,  0,quickLight)
+                    
+                #except: print('json exception@getserverupdates')
+        if fade1Music<60*.1: nomusicfade=True
+        else: nomusicfade=False
+        #print((fade1Music,60*.1,nomusicfade))
+        time.sleep(.1)
         
 #--------------------------------------------------------
 timeout=time.time()
@@ -530,7 +576,9 @@ Thread(target = temperatureThread).start()
 Thread(target = getserverupdates).start()
 Thread(target = actionThread).start()
 Thread(target = musicThread).start()
-                  
-printer.goodbye(myname,version)
+ 
+#time.sleep(5)
+#printer.fout('led_startup',True) 
+#printer.goodbye(myname,version)
         
 #=============================================================================================================================================================#

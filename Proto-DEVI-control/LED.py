@@ -68,11 +68,11 @@ def getupdates():
         elif tlum_s=='safe' : alert=False
         elif tlum_s=="end"  : alive=False
         elif not alert:
-            try: tlum=float(tlum_s)                     
-            except: print('tlum float exception')                    
+            try: tlum=int(tlum_s)                     
+            except: print('tlum int exception')                    
                 
-        try: vel=float(vel_s)
-        except: print('vel float exception')
+        try: vel=int(vel_s)
+        except: print('vel int exception')
 
         time.sleep(.25)
                 
@@ -235,6 +235,7 @@ while alive:
         tlum_=tlum
         timer=time.time()
 
+    if not vel: vel=.0001
     el=(time.time()-timer)/vel
     if el>1: el=1
     if el<0: el=0

@@ -3,7 +3,7 @@
 
 mypi='gui'
 myname="zerog.py"
-version="v.a.1.22"
+version="v.a.1.40"
 abspath='/home/pi/Desktop/'
 
 #=============================================================================================================================================================#
@@ -20,7 +20,9 @@ import client_hmi as client
 
 printer.hello(myname,version)
 
+control_ip=False
 def socketboot():
+    global control_ip
     import mdns_hmi as mdns
     control_ip= (mdns.info.properties[b'eth0']).decode('utf-8')
     my_ip=mdns.ip
@@ -82,7 +84,9 @@ colorthereapymode=False
 timeleft_str="READY"
 wlanSorted=[]
 ssidSelect=False
+ssid_refresh=0
 pwdSelect=''
+audiomode=0
 
 #sleepMode=False
 try: colvals=json.loads(printer.fin('colvals'))
@@ -152,6 +156,7 @@ floatscreen       = False
 playfloat         = False
 settingsscreen    = False
 customscreen      = False
+audioscreen       = False
 levelsscreen      = False
 wifiscreen        = False
 runtimescreen     = False
@@ -162,7 +167,10 @@ trendsscreen      = False
 manualfilter      = False
 manualh2o2        = False
 floatpreset       = -1
+pump_runtime      = 0
+solution_runtime  = 0
 filter_runtime    = 0
+uvbulb_runtime    = 0
 
 min_fade1          = float(printer.fin('min_fade1'))
 min_fade2          = float(printer.fin('min_fade2'))
@@ -176,17 +184,22 @@ ORP_lev            = float(printer.fin('ORP_lev'))
 specgrav_lev       = float(printer.fin('specgrav_lev'))  
 lbssalt_lev        = float(printer.fin('lbssalt_lev'))  
 t_offset           = float(printer.fin('t_offset'))  
+pump_runtime       = float(printer.fin('pump_runtime'))
 filter_runtime     = float(printer.fin('filter_runtime'))
 uvbulb_runtime     = float(printer.fin('uvbulb_runtime'))
-rt_solution_start  = float(printer.fin('rt_solution_start'))
+solution_runtime   = float(printer.fin('solution_runtime'))
 rt_filter_max      = float(printer.fin('rt_filter_max'))
 rt_uvbulb_max      = float(printer.fin('rt_uvbulb_max'))
 rt_solution_max    = float(printer.fin('rt_solution_max'))
 rt_filter_thresh   = float(printer.fin('rt_filter_thresh'))
 rt_uvbulb_thresh   = float(printer.fin('rt_uvbulb_thresh'))
 rt_solution_thresh = float(printer.fin('rt_solution_thresh'))
+floatpreset        = float(printer.fin('floatpreset'))
+try: max_vol            = float(printer.fin('max_vol'))
+except: pass
+audiomode          =   int(printer.fin('audiomode'))
 
-if not rt_solution_start: rt_solution_start=rt_total_start
+if not solution_runtime: solution_runtime=pump_runtime
 if not rt_filter_max:   rt_filter_max   =  200
 if not rt_uvbulb_max:   rt_uvbulb_max   = 2000
 if not rt_solution_max: rt_solution_max = 3000
@@ -195,15 +208,10 @@ if not rt_filter_thresh:   rt_filter_thresh   = .9
 if not rt_uvbulb_thresh:   rt_uvbulb_thresh   = .9
 if not rt_solution_thresh: rt_solution_thresh = .9
 
-
 fout_currentTemperature=False
 fout_targetTemperature=False
 fout_pH=False
 fout_ORP=False
-
-
-floatpreset     = float(printer.fin('floatpreset'))
-max_vol         = float(printer.fin('max_vol'))
 
 if custom_duration<(min_fade1+min_fade2): custom_duration=(min_fade1+min_fade2)
 
@@ -212,6 +220,7 @@ if printer.fin('floatscreen')    =="True": floatscreen    = True
 if printer.fin('playfloat')      =="True": playfloat      = True
 if printer.fin('settingsscreen') =="True": settingsscreen = True
 if printer.fin('customscreen')   =="True": customscreen   = True
+if printer.fin('audioscreen')    =="True": audioscreen    = True
 if printer.fin('levelsscreen')   =="True": levelsscreen   = True
 if printer.fin('wifiscreen')     =="True": wifiscreen     = True
 if printer.fin('runtimescreen')  =="True": runtimescreen  = True
@@ -220,6 +229,7 @@ if printer.fin('manualfilter')   =="True": manualfilter   = True
 if printer.fin('manualh2o2')     =="True": manualh2o2     = True
 reloaded=True
 
+#if floatpreset==60 or floatpreset==90: min_fade1=min_fade2=min_fade1_m=min_fade2_m=1
 if floatpreset==60: min_float=60-(min_fade1+min_fade2)
 if floatpreset==90: min_float=90-(min_fade1+min_fade2)
 if floatpreset==-1: min_float=math.floor(custom_duration)-(min_fade1+min_fade2)
@@ -250,8 +260,9 @@ custom   =pygame.image.load(abspath+'guiassets/settings/custom.png')
 filter   =pygame.image.load(abspath+'guiassets/settings/filter.png')
 h2o2     =pygame.image.load(abspath+'guiassets/settings/h2o2.png')
 volume   =pygame.image.load(abspath+'guiassets/settings/volume.png')
+audio    =pygame.image.load(abspath+'guiassets/settings/audio.png')
 levels   =pygame.image.load(abspath+'guiassets/settings/levels.png')
-wifi     =pygame.image.load(abspath+'guiassets/settings/trends.png')
+wifi     =pygame.image.load(abspath+'guiassets/settings/blank.png')
 runtime  =pygame.image.load(abspath+'guiassets/settings/runtime.png')
 rt_edit  =pygame.image.load(abspath+'guiassets/settings/rt_edit.png')
 trends   =pygame.image.load(abspath+'guiassets/settings/trends.png')
@@ -304,11 +315,12 @@ sleep_button     = pygame.Rect( 60, 352-vOffset, 76,76)
 
 gear_button      = pygame.Rect(668, 352-vOffset, 76,76)
 
+levels_button    = pygame.Rect(0,0,1,1) #levels and therm are named pretty backwardly !!
+audio_button     = pygame.Rect( 60, 78+(352-78)/2-vOffset, 76,76)
 therm_button     = pygame.Rect( 60, 352-vOffset, 76,76)
 wifi_button      = pygame.Rect(668,  78-vOffset, 76,76)
 runtime_button   = pygame.Rect(668, 78+(352-78)/2-vOffset, 76,76)
 trends_button    = pygame.Rect(668, 352-vOffset, 76,76)
-levels_button    = pygame.Rect(0,0,1,1)
 
 filter_button    = pygame.Rect(170,  80-vOffset, 160,160)
 h2o2_button      = pygame.Rect(460,  80-vOffset, 160,160)
@@ -323,7 +335,6 @@ clength_button   = pygame.Rect(160, 360-vOffset, 245,100)
 ccol_button      = pygame.Rect(660,  55-vOffset,  95,390)
 ctherapy_button  = pygame.Rect(410, 370-vOffset,  76, 76)
 
-
 tcur_button      = pygame.Rect(155,  70-vOffset, 270,120)
 ttarg_button     = pygame.Rect(440,  70-vOffset, 270,120)
 pH_button        = pygame.Rect(155, 200-vOffset, 270,120)
@@ -331,7 +342,21 @@ ORP_button       = pygame.Rect(440, 200-vOffset, 270,120)
 specgrav_button  = pygame.Rect(155, 330-vOffset, 270,120)
 lbssalt_button   = pygame.Rect(440, 330-vOffset, 270,120)
 
-#rt_total_button  = pygame.Rect(171, 79,480,60)
+tr_vert0_button  = pygame.Rect( 53,143,40,40)
+tr_vert1_button  = pygame.Rect( 53,193,40,40)
+tr_left_button   = pygame.Rect( 53,243,40,40)
+tr_right_button  = pygame.Rect( 53,293,40,40)
+tr_leftM_button  = pygame.Rect( 53,343,40,40)
+tr_rightM_button = pygame.Rect( 53,393,40,40)
+
+tr_day_button    = pygame.Rect(708,143,40,40)
+tr_wk_button     = pygame.Rect(708,193,40,40)
+tr_mo_button     = pygame.Rect(708,243,40,40)
+tr_yr_button     = pygame.Rect(708,293,40,40)
+tr_3yr_button    = pygame.Rect(708,343,40,40)
+tr_live_button   = pygame.Rect(708,393,40,40)
+
+#rt_pump_button  = pygame.Rect(171, 79,480,60)
 rt_filter_button = pygame.Rect(71,149,680,44)
 rt_uvbulb_button = pygame.Rect(71,219,680,44)
 rt_salt_button   = pygame.Rect(71,289,680,44)
@@ -355,6 +380,15 @@ wifilist=-5
 fpst=time.time()
 fps=0
 tname="ZEROGRAVITY"
+def seth2o2():
+    global min_h2o2
+    if ORP_lev>=0:  min_h2o2=20 /60
+    if ORP_lev>150: min_h2o2=15 /60  #seconds as a decimal version of minutes
+    if ORP_lev>195: min_h2o2=10 /60  #seconds as a decimal version of minutes
+    if ORP_lev>250: min_h2o2=5 /60  #seconds as a decimal version of minutes
+    if ORP_lev>300: min_h2o2=1 /60  #seconds as a decimal version of minutes
+    #print(str(min_h2o2))
+
 def tankname():
     global fpst,fps
     global floatelapsed
@@ -394,18 +428,6 @@ def tankname():
     if m<10: m_str="0"+m_str
     if s<10: s_str="0"+s_str
     
-    def time_str(t):
-        tar=time.localtime( t )
-        ampm=" am"
-        hb=tar[3]
-        if hb>11: ampm=" pm"
-        if hb>12: hb-=12
-        if hb==0: hb=12
-        mb=tar[4]
-        mb_str=str(mb)
-        if mb<10: mb_str="0"+mb_str
-        return str(hb)+":"+mb_str+ampm
-    
     timeleft_str=h_str+":"+m_str+":"+s_str+" • "+time_str(floatstart+totalDuration*60)
 
     fps1=time.time()-fpst
@@ -420,7 +442,7 @@ def tankname():
     #debugstring=str(time.time()-cur_temp_refresh)
     if time.time()>cur_temp_refresh+6: thermoString=time_str(time.time())+" • - °F"
     else: 
-        try: thermoString=time_str(time.time())+" • "+str(int(10*(cur_temp+t_offset))/10)+" °F"
+        try: thermoString=time_str(time.time())+" • "+str(round(cur_temp+t_offset,1))+" °F"
         except: thermoString=time_str(time.time())+" • - °F"
     
     
@@ -444,51 +466,251 @@ def statusbar(text):
     status.set_alpha(alpha0)
     stage.blit(status, (400-status.get_rect().width/2, 374-vOffset))
 
+
 #-----------------------------------------------------------------
-
-
+lastLog=time.time()
 def updatelog():
-    return 0
-    print('log')
-    logfile=open(abspath+'log.txt', 'r')
-    #logline = logfile.readline().strip()
-    lines=logfile.readline()
+    global lastLog,lbssalt_lev
     
-    for line in lines:
-        if line[2:16]=="phase        :":
-            line=line.strip()
-            print(line[15:]+" | "+line[line.find('(')+1:-1])
+    f=open(abspath+'log.txt','a')
+    dat=json.dumps({
+        "t"       :int(time.time()+0),
+        "therm"   :round(cur_temp+t_offset,1),
+        "pH"      :round(pH_lev,1),
+        "ORP"     :int(ORP_lev+0),
+        "specgrav":round(specgrav_lev,2),
+        "salt"    :int(lbssalt_lev+0),
+        "h2o2"    :int(min_h2o2*60)
+        })
+    f.write(dat+'\n')
+    f.close()
+    
+    lastLog=time.time()
+    lbssalt_lev=0
+    printer.fout('lbssalt_lev',str(lbssalt_lev))
+    if trendsscreen: readlog()
+    
+loglines=[]
+def readlog():
+    global loglines
+    """
+    w=700-100-4
+    h=400-150-4
+    graph = pygame.Surface((w,h))
+    graph.fill((25,25,25))
+    loading=default_font.render("Loading...",1,(255,255,255))
+    graph.blit(loading, (300-loading.get_rect().width/2, 125-10))
+    screen.blit(graph, (103,153))
+    pygame.display.update()
+    """
+    try: loglines=[line.strip() for line in open(abspath+'log.txt', 'r')][::-1]
+    except: print('no log yet')
+    #print('read log')
+    repop_trendarr()
+        
             
+def time_str(t):
+    tar=time.localtime( t )
+    ampm=" am"
+    hb=tar[3]
+    if hb>11: ampm=" pm"
+    if hb>12: hb-=12
+    if hb==0: hb=12
+    mb=tar[4]
+    mb_str=str(mb)
+    if mb<10: mb_str="0"+mb_str
+    return str(hb)+":"+mb_str+ampm
+
+import datetime
+def time_str2(t): return ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][datetime.datetime.fromtimestamp(t).weekday()]
+def time_str3(t): 
+    d=datetime.datetime.fromtimestamp(t)
+    return str(d.month)+'/'+str(d.day)+'/'+str(d.year)[-2:]
+
 #-----------------------------------------------------------------
+trendarr=[0]*800
+xpos=-1
+domain=1
+trendmode={"h":1,"v":False,"x":0,"p":0}
+def repop_trendarr():
+    global trendarr,domain
+    
+    if domain==0: return
+    #if domain==0: 
+    #    if trendmode['p']!=0: domain=1
+    #    else: return
+        
+    trendarr=[0]*700
+    
+    n=0
+    y=0.0
+    w=700-100-4
+    param=["therm","pH","ORP","specgrav","salt","h2o2"][trendmode['p']]
+    for i in loglines: 
+        n+=1
+        try: dat=json.loads(i.rstrip())
+        except: continue
+        t=w-int((time.time()-dat['t'])/domain+trendmode['x']*w/3)
+        #t=int(w-(time.time()-dat['t'])*60/domain+trendmode['x']*w/3)  #tester!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        if t<-10: break
+        if t>=0 and t<=600: trendarr[t]=dat[param]
+        #if n>w+trendmode['x']: break
+    trendarr[w+1]=dat[param]
+    #if param=='salt' and dat[param]==0: trendarr[w+1]=.0001
+    
+    for x in range(w+1,0,-1):
+        if trendarr[x]==0 and param!='salt': trendarr[x]=y
+        else: y=trendarr[x]
+        
 def trendgraph():
-    #tankname()
+    global trendmode,trendarr,debugstring,xpos,domain
+    
     pygame.draw.line(stage, (112,128,232), (100,150),(700,150), 2)
     pygame.draw.line(stage, (112,128,232), (100,150),(100,400), 2)
     pygame.draw.line(stage, (112,128,232), (100,400),(700,400), 2)
     pygame.draw.line(stage, (112,128,232), (700,150),(700,400), 2)
-    w=700-100-3
-    h=400-150-3
+    w=700-100-4
+    h=400-150-4
     graph = pygame.Surface((w,h))
     graph.fill((25,25,25))
     y2=0
     
-    pygame.draw.line(graph, (56,94,116), (0,100),(600,100), 1)
-    
-    for x in range(-2,w-1):
-        y1=y2
-        xt=x+time.time()*10
-        y2=10*math.sin(xt/100)-5*math.cos(xt/50)#-xt/50
-        pygame.draw.line(graph, (212,228,232), (x,100+y1),(x+1,100+y2), 2)
-      
-    
-    stage.blit(graph,(102,152))
-    more1=status_font.render("TEMPERATURE",1,(128,203,224))
-    more2=default_font.render("pH  |  ORP  |  SPEC.GRAV.  |  SALT  |  H2O2 s.",1,(28,103,124))
-    targ=default_font.render("93.5 °F",1,(28,103,124))
-    stage.blit(more1, (400-more1.get_rect().width/2, 50))
-    stage.blit(more2, (400-more2.get_rect().width/2, 90))
-    stage.blit(targ, (710, 250))
+    livemode=False
+    if domain==0: livemode=True
 
+    miny=0
+    maxy  =[      120,  14,  600, 3.00,   100,     30][trendmode['p']]
+    targ_ =[targ_temp, 7.2,  200, 1.25,     0,     10][trendmode['p']]
+    rnd   =[        1,   1,    0,    2,     0,      0][trendmode['p']]
+    suffix=[    ' °F',  '', 'mV',   '', 'lb.', 'sec.'][trendmode['p']]
+    if livemode: liveval=[cur_temp+t_offset,pH_lev,ORP_lev,specgrav_lev,lbssalt_lev,min_h2o2*60][trendmode['p']]
+
+    #vals for 1hr interval
+    
+    if trendmode['v']: 
+        miny=999999999999
+        maxy=-999999999999
+        for x in range(0,w+2):
+            if trendarr[x]<miny and trendarr[x]!=0: miny=trendarr[x]
+            if trendarr[x]>maxy:                    maxy=trendarr[x]
+        miny=(miny-.01)/1.01
+        maxy=(maxy+.01)*1.01
+        rangey=(maxy-miny)
+        midy=miny+rangey/2
+        miny=midy-rangey*.6
+        maxy=midy+rangey*.6
+        
+    if xpos==-1: xpos=w-10
+    mx,my=pos
+    if mouseL:        
+        if mx>100 and mx<100+w and my>153 and my<153+h: xpos=mx-100            
+        
+    x_=-999
+    y_=0
+    timeOffset=trendmode['x']*w/3*domain
+    def func(p): return (p-miny)/(maxy-miny)*h
+    for x in range(0,w+1):
+        if livemode:
+            trendarr[x]=trendarr[x+1]
+            y=func(trendarr[x])
+            if x==xpos: val_=trendarr[x]
+        else:
+            y=func(trendarr[x])
+            if x==xpos: val_=trendarr[x]
+        pygame.draw.line(graph, (53+25,25,8+25), (x,h),(x,h-y), 1)
+        if trendarr[x]!=0: pygame.draw.line(graph, (212+25,25,32+25), (x_,h-y_),(x,h-y+1), 2)
+        x_=x
+        y_=y
+        
+        if x%150 == 0 and not livemode:
+            tick_time_=time.time()-(w-x)*domain-timeOffset
+            tick_time=''
+            if trendmode['h']>=1: tick_time=time_str2(tick_time_)+" "+time_str(tick_time_)
+            if trendmode['h']>=3: tick_time=time_str3(tick_time_)
+            tick=default_font.render(tick_time,1,(0,128,255))
+            stage.blit(tick,(103+x,153+h+5))
+
+    if val_==0:
+        val_1=val_2=val_
+        xoff=0
+        while val_1==0 and val_2==0 and xoff<50 and xpos+xoff<w and xpos-xoff>0:
+            if xpos-xoff>=0:  val_1=trendarr[xpos-xoff]
+            if xpos+xoff<600: val_2=trendarr[xpos+xoff]
+            xoff+=1
+        if   val_1!=0: val_=val_1            
+        elif val_2!=0: val_=val_2
+
+        
+    time_=""
+    if livemode: 
+        trendarr[x+1]=liveval
+        tick=default_font.render('Live Update Mode: '+time_str(time.time()),1,(0,128,255))
+        stage.blit(tick,(103+w/2-tick.get_rect().width/2,153+h+5))
+    else: 
+        _time_=time.time()-(w-xpos)*domain-timeOffset
+        if trendmode['h']>=1: time_=time_str2(_time_)+" "+time_str(_time_)+", "+time_str3(_time_)
+        if trendmode['h']>=3: time_=time_str3(_time_)
+    
+    pygame.draw.line(graph, (28, 97, 58), (0,h-func(targ_)),(600,h-func(targ_)), 1)
+    pygame.draw.line(graph, (56, 94,116), (0,h-func(val_ )),(600,h-func(val_ )), 1)
+    pygame.draw.line(graph, (56, 94,116), (xpos,0),         (xpos,h),            1)
+    
+    def dyn_round(v,r):
+        if r==0: return int(v+0)
+        else: return round(v,r)
+        
+    targ  = default_font.render(str(dyn_round(targ_,rnd))+suffix,1,( 78,203,124))
+    val   = default_font.render(str(dyn_round(val_, rnd))+suffix,1,(255,255,255))
+    vtime = default_font.render(time_,                     1,(255,255,255))
+    
+    graph.blit(targ, (  595-targ.get_rect().width, h-func(targ_)-20))
+
+    params=['TEMPERATURE','pH','ORP','SPECIFIC GRAVITY','EPSOM SALT','H2O2']
+    current=params[trendmode['p']]
+    others=''
+    
+    other_ws=[0]*(len(params))
+    q=1
+    for i in range(0,len(params)): 
+        if i==trendmode['p']: continue
+        others+=params[i]+'  |  '
+        temp=default_font.render(others,1,(0,0,0))    
+        other_ws[q]=temp.get_rect().width
+        q+=1
+    
+    others=others[:-3]
+    current = status_font.render(current,1,(128,203,224))
+    others = default_font.render(others,1,(28,103,124))
+    
+    sx=400-others.get_rect().width/2
+    if my>=80 and my<=120 and go:
+        oldparam=trendmode['p']
+        newparam=-1
+        for i in range(0,len(other_ws)):
+            if mx>sx+other_ws[i]-10: newparam=i
+        if newparam>=oldparam:    newparam+=1
+        if newparam==len(params): newparam=oldparam
+        if newparam<0:            newparam=oldparam
+        trendmode['p']=newparam
+        #if trendmode['h']==0 and trendmode['p']!=0: trendmode['h']=1
+        trendarr=[0.0]*800
+        repop_trendarr()
+    
+    
+    stage.blit(graph,   (103,                           153))
+    stage.blit(current, (400-current.get_rect().width/2, 50))
+    stage.blit(others,  (sx,                             90))
+    
+    if xpos-5-vtime.get_rect().width>=100:
+        stage.blit(val,   (100+xpos-5-  val.get_rect().width, 153+h-func(val_ )-20))
+        stage.blit(vtime, (100+xpos-5-vtime.get_rect().width, 153+h-func(val_ )+5))
+    else:
+        stage.blit(val,   (100+xpos+5, 153+h-func(val_ )-20))
+        stage.blit(vtime, (100+xpos+5, 153+h-func(val_ )+5))
+
+
+    #debugstring=str((trendmode,pos))
+    
 #-----------------------------------------------------------------
 keybshift=False
 keybcaps=False
@@ -622,6 +844,160 @@ def timey(t):
     return hrs+":"+min[-2:]+":"+sec[-2:]
 
 #-----------------------------------------------------------------
+#widestusbaudioname=200
+usb_yoffset=0
+usb_bottom=999999999
+usb_audiofile=''
+usb_index=-1
+usb_buffer=False
+def audiowidgets():    
+    global audiomode,debugstring,widestusbaudioname,usb_yoffset,stepperSpeed,even,usb_bottom,usb_audiofile,usb_index,usb_buffer
+    #jkl;
+    title =tankname_font.render("AUDIO SOURCE",1,(132, 202, 232))
+    stage.blit(title,  (410- title.get_rect().width/2,  30))
+    
+    mx,my=pos
+    w=550
+    h=279
+    filelist = pygame.Surface((w+20,h+20))
+    filelist.fill((22,27,33))
+    pygame.draw.rect(filelist,(32,108,128),pygame.Rect(0,0,w+20,h+20), 4)
+    stage.blit(filelist,(160,98))
+    
+    filelist = pygame.Surface((w,h))
+    filelist.fill((22,27,33))
+    
+    if audiomode==0: 
+        t1=default_font.render('Default', 1,(64,208,255))
+        t2=default_font.render('Brian Eno - Ambient Music', 1,(64,208,255))
+        filelist.blit(t1, (w/2-t1.get_rect().width/2, h/2-22))
+        filelist.blit(t2, (w/2-t2.get_rect().width/2, h/2))        
+            
+    if audiomode==1:
+        #debugstring=str(pos)
+        if mx>665 and mx<740 and my> 50 and my<100 and mouseL: 
+            usb_yoffset+=(1+stepperSpeed)
+            if stepperSpeed<10: stepperSpeed+=.5
+            even=True
+        elif mx>665 and mx<740 and my>400 and my<450 and mouseL:
+            usb_yoffset-=(1+stepperSpeed)
+            if stepperSpeed<10: stepperSpeed+=.5
+            even=True
+        else: stepperSpeed=0
+        if stepperSpeed>30: stepperSpeed=30
+        
+        if usb_yoffset>0: usb_yoffset=0
+        if usb_yoffset<-usb_bottom+h-60: usb_yoffset=-usb_bottom+h-60
+        
+        y=5+usb_yoffset
+        for i in range(0,len(usbmedia)):
+            y+=30
+            if y>h: break            
+            if y<-20: continue
+            col1=(128,236,255)
+            col2=(32,108,225)
+            if i==usb_index: 
+                pygame.draw.rect(filelist,col2,pygame.Rect(0,y-5,w,30),0)
+                col1=col2=(255,255,255)
+            
+            f=default_font.render(usbfiles[i], 1,col1)
+            p=default_font.render(usbpaths[i], 1,col2)
+            filelist.blit(f, (0, y))
+            filelist.blit(p, (200+10, y))
+            if i==len(usbmedia)-1: usb_bottom=y-usb_yoffset
+        
+        if usb_audiofile!='': 
+            ua='"'+usb_audiofile[len('/media/pi/'):149]+'"'
+            buf_str=""
+            if usb_buffer: buf_str="Buffering... "
+            b= default_font.render(buf_str, 1,(255,255,225))
+            f1=default_font.render(ua[  0: 50],     1,(128,236,225))
+            f2=default_font.render(ua[ 50:100],     1,(128,236,225))
+            f3=default_font.render(ua[100:150],     1,(128,236,225))
+            stage.blit(b, (190, 108+h+13))
+            stage.blit(f1, (190+b.get_rect().width, 108+h+13))
+            stage.blit(f2, (190, 108+h+33))
+            stage.blit(f3, (190, 108+h+53))
+        
+    if audiomode==2:
+        t=default_font.render('Auxiliary Audio Mode Enabled', 1,(64,208,255))
+        filelist.blit(t, (w/2-t.get_rect().width/2, h/2-15))
+    
+    if mx>50 and mx<150 and go and not mlock:
+        if my>150 and my<250: audiomode=0
+        if my>250 and my<350: 
+            audiomode=1
+            get_usbmedia()
+            usb_yoffset=0
+            usb_index=-1
+            usb_audiofile=''            
+        if my>350 and my<450: audiomode=2
+        if not (usb_buffer and audiomode==1): client.send(json.dumps({'audiomode':audiomode}))            
+    
+    if mx>170 and mx<170+w and my>108 and my<108+h and go:
+        #jkl;
+        try:
+            usb_index=int( (my-usb_yoffset-50)/30-3 )
+            usb_audiofile=usbmedia[usb_index]
+            usb_buffer=True
+            sendfile(usb_audiofile,abspath+'usb.mp3')
+        except: promt('send audio file exception')
+    stage.blit(filelist,(170,108))    
+
+import http.server
+import socketserver
+def httpserver():
+    Handler = http.server.SimpleHTTPRequestHandler
+    httpd = socketserver.TCPServer(("", 8000), Handler)
+    httpd.serve_forever()
+
+Thread(target = httpserver).start()
+
+def sendfile(fl,fr): Thread(target = sendfileThread, args=[fl,fr]).start()
+def sendfileThread(fl,fr): 
+    print('cp "'+fl+'" temp')
+    os.system("sudo mount /dev/sda1 /media/pi/USB")
+    os.system('sudo cp "'+fl+'" temp')
+    os.system("sudo udisks --unmount /dev/sda1")
+    client.send(json.dumps({"fileget":fr}))    
+    
+usbmedia=[]
+usbfiles=[]
+usbpaths=[]
+def get_usbmedia():
+    global usbmedia,usbfiles,usbpaths
+    os.system("sudo mount /dev/sda1 /media/pi/USB")
+    os.system('find /media/pi/ -type f -name "*.mp3" > '+abspath+'usbmedia.txt')
+    os.system("sudo udisks --unmount /dev/sda1")
+    usbmedia=[line.strip() for line in open(abspath+'usbmedia.txt', 'r')][::-1]    
+    
+    #this is dirty but whatever for now. hardcoded w/h from audiowidgets module
+    w=550
+    h=279
+    filelist = pygame.Surface((w+20,h+20))
+    filelist.fill((22,27,33))
+    #pygame.draw.rect(filelist,(32,108,128),pygame.Rect(0,0,w+20,h+20), 4)
+    t=default_font.render('Searching for Audio Files...', 1,(64,208,255))
+    filelist.blit(t, (w/2-t.get_rect().width/2, h/2-15)) 
+    screen.blit(filelist,(160,98))
+    pygame.display.update()
+    
+    usbfiles=['']*len(usbmedia)
+    usbpaths=['']*len(usbmedia)
+    
+    for i in range(0,len(usbmedia)):
+        f_=usbmedia[i][len('/media/pi/'):]
+        path, filename = os.path.split(f_)
+        f=default_font.render(filename, 1,(128,236,255))
+        f_w=f.get_rect().width
+        while f_w>200-10:
+            filename=filename[:-4]+'...'
+            f=default_font.render(filename,1,(128,236,255))
+            f_w=f.get_rect().width            
+        usbfiles[i]=filename
+        usbpaths[i]=path
+    
+#-----------------------------------------------------------------
 
 def rteditbars():
     if r1screen:
@@ -647,22 +1023,35 @@ def rteditbars():
     stage.blit(thresh, (545-thresh.get_rect().width/2, 170))
 
     
+foutprep=0
 def runtimebars():
-    global filter_runtime,uvbulb_runtime,rt_solution_start,last_rt
+    global pump_runtime,filter_runtime,uvbulb_runtime,solution_runtime
+    global last_rt,foutprep
     w=398
     h=44
-    
-    if manualfilter and time.time()>last_rt+1:
-      filter_runtime+=1
-      uvbulb_runtime+=1
-      printer.fout('filter_runtime',str(filter_runtime))
-      printer.fout('uvbulb_runtime',str(uvbulb_runtime))
-      last_rt=time.time()
 
-    rt_total   =math.floor(time.time())-rt_total_start
+    #asdf
+    if time.time()>last_rt+1:
+        last_rt=time.time()
+        foutprep+=1
+        if manualfilter or phase>=PHASE_PLO:
+            filter_runtime+=1
+            pump_runtime+=1 
+        if manualfilter or phase>=PHASE_PHI :    uvbulb_runtime+=1
+        if phase>PHASE_NONE and phase<PHASE_PLO: solution_runtime+=1
+        if foutprep==10:
+            foutprep=0
+            printer.fout('filter_runtime',str(filter_runtime))
+            printer.fout('uvbulb_runtime',str(uvbulb_runtime))
+            printer.fout('pump_runtime',str(pump_runtime))
+            printer.fout('solution_runtime',str(solution_runtime))
+
+        
+    if not runtimescreen: return
+    rt_pump    =math.floor(pump_runtime)
     rt_filter  =math.floor(filter_runtime)
     rt_uvbulb  =math.floor(uvbulb_runtime)
-    rt_solution=math.floor(time.time())-rt_solution_start
+    rt_solution=math.floor(solution_runtime)
         
     filter_w   = 1+rt_filter/rt_filter_max/3600*w
     uvbulb_w   = 1+rt_uvbulb/rt_uvbulb_max/3600*w
@@ -672,24 +1061,24 @@ def runtimebars():
     pygame.draw.line(stage, (212,228,232), (211,219+h/2),(211+uvbulb_w,219+h/2), h-4)
     pygame.draw.line(stage, (212,228,232), (211,289+h/2),(211+solution_w,289+h/2), h-4)
 
-    rt_total_text    = default_font.render(timey(rt_total),1,(140,140,128))
+    rt_pump_text    = default_font.render(timey(rt_pump),1,(140,140,128))
     rt_filter_text   = default_font.render(timey(rt_filter)  +" of "+str(math.floor(rt_filter_max)),  1,(140,140,128))
     rt_uvbulb_text   = default_font.render(timey(rt_uvbulb)  +" of "+str(math.floor(rt_uvbulb_max)),  1,(140,140,128))
     rt_solution_text = default_font.render(timey(rt_solution)+" of "+str(math.floor(rt_solution_max)),1,(140,140,128))
     
-    stage.blit(rt_total_text,    (480,108-1))
+    stage.blit(rt_pump_text,     (480,108-1))
     stage.blit(rt_filter_text,   (228+w,149+13))
     stage.blit(rt_uvbulb_text,   (228+w,219+13))
     stage.blit(rt_solution_text, (228+w,289+13))
     
 #-----------------------------------------------------------------
 def levelsbars(cur,targ,pH,ORP,sg,ls):
-    curtext=str(math.floor(cur*10)/10)
-    targtext=str(math.floor(targ*10)/10)
-    pHtext=str(math.floor(pH*10)/10)
-    ORPtext=str(math.floor(ORP))
-    sgtext=str(math.floor(sg*100)/100)
-    lstext=str(math.floor(ls))
+    curtext  = str(round(cur,1))
+    targtext = str(round(targ,1))
+    pHtext   = str(round(pH,1))
+    ORPtext  = str(int(ORP+0))
+    sgtext   = str(round(sg,2))
+    lstext   = str(int(ls+0))
     
     cur  = tankname_font.render(curtext, 1,(28,103,124))
     targ = tankname_font.render(targtext,1,(28,103,124))
@@ -767,6 +1156,8 @@ def drawgradbar():
     _plo    =w/totalDuration*min_plo
     _filter =w/totalDuration*min_phi
 
+    if floatpreset==60 or floatpreset==90: _fade1=_fade1m=_fade2=_fade2m =w/totalDuration*1
+        
     gradsurface = pygame.Surface((w,h))
     progbar     = pygame.Surface((w,h))
     progbar.fill((22,27,33))
@@ -821,7 +1212,7 @@ def drawgradbar():
             _b=byteclamp(_b*(.3*c_b+.7))
             
         pygame.draw.line(gradsurface, (_r,_g,_b), (x,0),(x,h), 1)
-        pygame.draw.line(gradsurface, (byteclamp(8+1.5*_r),byteclamp(8+1.5*_g),byteclamp(8+1.5*_b),), (x,h-mus_y*h/2),(x,h), 1)
+        pygame.draw.line(gradsurface, (byteclamp(16+1.5*_r),byteclamp(16+1.5*_g),byteclamp(16+1.5*_b),), (x,h-mus_y*h/2),(x,h), 1)
             
     pygame.draw.line(gradsurface, (0,0,0), (_shower,0),(_shower,h), 1)
     pygame.draw.line(gradsurface, (0,0,0), (_shower+_fade1+_float+_fade2,0),(_shower+_fade1+_float+_fade2,h), 1)
@@ -852,7 +1243,7 @@ cur_temp_refresh=0
 def getserverupdates():
     try:
         while alive:
-            global cur_temp,alertMode,lightMode,debugstring,cur_temp_refresh
+            global cur_temp,alertMode,lightMode,debugstring,cur_temp_refresh,usb_buffer
             if server.data!='':
                 try: j=json.loads(server.data)
                 except Exception as e:
@@ -862,21 +1253,25 @@ def getserverupdates():
                 server.data='' #used it up ;)
                 jk=j.keys()
                 
-                if 'alertMode' in jk: alertMode=j['alertMode']
-                if 'lightMode' in jk: lightMode=bool(j['lightMode'])
-                if 'fthermo'   in jk: 
+                if 'filegotten' in jk: 
+                    usb_buffer=False
+                    client.send(json.dumps({'audiomode':audiomode}))
+                if 'alertMode'  in jk: alertMode=j['alertMode']
+                if 'lightMode'  in jk: lightMode=bool(j['lightMode'])
+                if 'fthermo'    in jk: 
                     cur_temp=j['fthermo']
                     cur_temp_refresh=time.time()
                 #old_sleepMode=sleepMode=not lightMode
             time.sleep(.1)
-    except: print('serverupdate reboot')
+    except: print('serverupdate exception')
     
 reason=status_font.render("Are both override switches set to OFF?", 1, (194,184,174))
 reasonSurface.blit(reason,(400-reason.get_rect().width/2,240-reason.get_rect().height/2))
 
-lastLog=time.time()
-lastInit=time.time()-100
-if trendsscreen: updatelog()
+os.system("sudo udisks --unmount /dev/sda1")
+lastInit=time.time()-10
+if trendsscreen: readlog()
+if audioscreen and audiomode==1: get_usbmedia()
 
 #================================ THE MAIN LOOP ================================                
 if settingsscreen and manualfilter: layer1=filter
@@ -897,7 +1292,7 @@ old_fade=fade
 old_manualfilter=manualfilter
 old_manualh2o2=manualh2o2
 old_max_vol=max_vol
-old_targ_temp=targ_temp_i=int(targ_temp*10)/10
+old_targ_temp=targ_temp_i=round(targ_temp,1)
 old_t_offset=t_offset
 #old_min_fade1=min_fade1
 #old_min_fade2=min_fade2
@@ -906,10 +1301,11 @@ old_t_offset=t_offset
 
 mouseL=old_mouseL=0
 fout_ct_time=time.time()
+seth2o2()
 
 Thread(target=getserverupdates).start()
 while alive:
-    exScr=(not customscreen and not levelsscreen and not wifiscreen and not runtimescreen and not trendsscreen)
+    exScr=(not customscreen and not levelsscreen and not wifiscreen and not runtimescreen and not trendsscreen and not audioscreen)
 
     for e in pygame.event.get(): continue
     #try: debugstring=(str(time.time()%10)[:4]+" : "+str(e.dict['pos'])+" | "+str(pygame.event.get_grab()))
@@ -962,6 +1358,7 @@ while alive:
         on_gear      =      gear_button.collidepoint(pos)
 
         on_therm     =     therm_button.collidepoint(pos)
+        on_audio     =     audio_button.collidepoint(pos)
         on_levels    =    levels_button.collidepoint(pos)
         on_wifi      =      wifi_button.collidepoint(pos)
         on_runtime   =   runtime_button.collidepoint(pos)
@@ -992,9 +1389,22 @@ while alive:
         on_rt_salt   =   rt_salt_button.collidepoint(pos)
         on_rt_max    =    rt_max_button.collidepoint(pos)
         on_rt_thresh = rt_thresh_button.collidepoint(pos)
-        on_rt_reset  = rt_reset_button.collidepoint(pos)
+        on_rt_reset  =  rt_reset_button.collidepoint(pos)
 
-        on_gradbar   =  gradbar_button.collidepoint(pos)
+        on_tr_vert0  =  tr_vert0_button.collidepoint(pos)
+        on_tr_vert1  =  tr_vert1_button.collidepoint(pos)
+        on_tr_left   =   tr_left_button.collidepoint(pos)
+        on_tr_leftM  =  tr_leftM_button.collidepoint(pos)
+        on_tr_right  =  tr_right_button.collidepoint(pos)
+        on_tr_rightM = tr_rightM_button.collidepoint(pos)
+        on_tr_day    =    tr_day_button.collidepoint(pos)
+        on_tr_wk     =     tr_wk_button.collidepoint(pos)
+        on_tr_mo     =     tr_mo_button.collidepoint(pos)
+        on_tr_yr     =     tr_yr_button.collidepoint(pos)
+        on_tr_3yr    =    tr_3yr_button.collidepoint(pos)
+        on_tr_live   =   tr_live_button.collidepoint(pos)
+
+        on_gradbar   =   gradbar_button.collidepoint(pos)
         
         #printer.p(OOO+"zerogAlive === about to go into the buttons...")
         oldTarg0 = layer0
@@ -1002,6 +1412,8 @@ while alive:
         oldTarg2 = layer2
         oldTarg3 = layer3
         oldTarg4 = layer4
+
+        if not runtimescreen and (phase>PHASE_NONE or manualfilter or manualh2o2): runtimebars()
 
         #============================================================================#
         #                                                                            #
@@ -1019,8 +1431,10 @@ while alive:
             #if on_ninetymin   : layer0 = ninetymin
             #if on_custommin   : layer0 = custommin
             
-            if on_exit and go: alive = False
-            if on_exit and go: printer.p(OOO+"zerogAlive === ending...")
+            #if on_exit and go and settingsscreen and exScr:
+            if on_exit and go and settingsscreen:
+                alive = False
+                printer.p(OOO+"zerogAlive === ending...")
 
             #asdf
             custom_condition=(on_custom and settingsscreen and exScr)
@@ -1030,9 +1444,16 @@ while alive:
                 customscreen = True
                 printer.fout('customscreen',str(customscreen)) 
             
+            if on_audio and go and settingsscreen and exScr: 
+                audioscreen = True 
+                mlock=True
+                printer.fout('audioscreen',str(audioscreen)) 
+                if audiomode==1: get_usbmedia()
+
             if on_trends and go and settingsscreen and exScr: 
+                #updatelog()
+                readlog()
                 trendsscreen = True 
-                updatelog()
                 printer.fout('trendsscreen',str(trendsscreen)) 
 
             if on_wifi and go and settingsscreen and exScr: 
@@ -1040,6 +1461,7 @@ while alive:
                 wifiscreen = True 
                 wifilist=-5
                 ssidSelect=False
+                ssid_refresh=0
                 printer.fout('wifiscreen',str(wifiscreen)) 
             
             if on_runtime and go and settingsscreen and exScr: 
@@ -1065,6 +1487,7 @@ while alive:
                 
                 if (on_sixtymin or on_ninetymin or on_custommin) and go: 
                     floatscreen = True
+                    #if floatpreset==60 or floatpreset==90: min_fade1=min_fade2=min_fade1_m=min_fade2_m=1
                     if floatpreset==-1: min_float = math.floor(custom_duration)-(min_fade1+min_fade2)
                     else: min_float = floatpreset-(min_fade1+min_fade2)
                     #printer.fout('min_float',str(min_float))
@@ -1226,11 +1649,46 @@ while alive:
 
 
             #============================================================================
+            #                            AUDIOSCREEN
+            #============================================================================
+            if audioscreen:
+                #jkl;
+                layer0=audio                
+            
+            #============================================================================
             #                            TRENDSSCREEN
             #============================================================================
             if trendsscreen:
                 layer0=trends
-            
+                on_any_horiz=(on_tr_day or on_tr_wk or on_tr_mo or on_tr_yr or on_tr_3yr or on_tr_live)
+                if on_tr_day  and go: trendmode['h']=1
+                if on_tr_wk   and go: trendmode['h']=2
+                if on_tr_mo   and go: trendmode['h']=3
+                if on_tr_yr   and go: trendmode['h']=4
+                if on_tr_3yr  and go: trendmode['h']=5
+                if on_tr_live and go: trendmode['h']=0
+                
+                if on_any_horiz and go: 
+                    trendmode['x']=0
+                    domain=trendmode['h']
+                    if domain==1: domain=6*24        #about 1 day
+                    if domain==2: domain=6*24*7      #about 1 week
+                    if domain==3: domain=6*24*30     #about 1 month
+                    if domain==4: domain=6*24*365    #about 1 year
+                    if domain==5: domain=6*24*365*3  #about 3 years
+                    
+                if on_tr_vert0  and go: trendmode['v']=True
+                if on_tr_vert1  and go: trendmode['v']=False
+                if on_tr_leftM  and go: trendmode['x']=len(loglines)-10*domain
+                if on_tr_rightM and go: trendmode['x']=0
+                if on_tr_left   and go: trendmode['x']+=1
+                if on_tr_right  and go: trendmode['x']-=1
+                
+                if go and (on_any_horiz or on_tr_leftM or on_tr_rightM or on_tr_left or on_tr_right):
+                    if trendmode['x']<0: trendmode['x']=0
+                    trendarr=[0]*800
+                    repop_trendarr()
+                
             #============================================================================
             #                             WIFISCREEN
             #============================================================================
@@ -1318,8 +1776,8 @@ while alive:
                                 uvbulb_runtime=0
                                 printer.fout('filter_runtime',str(uvbulb_runtime))                                
                             if r3screen:
-                                rt_solution_start=time.time()
-                                printer.fout('rt_solution_start',str(rt_solution_start))                                
+                                solution_runtime=0
+                                printer.fout('solution_runtime',str(solution_runtime))                                
 
                             #playfloat=False
                             #printer.fout('playfloat',str(playfloat))
@@ -1377,7 +1835,7 @@ while alive:
                 elif fout_targetTemperature:
                     printer.fout('targ_temp',str(targ_temp))
                     fout_targetTemperature=False
-                    targ_temp_i=int(targ_temp*10)/10
+                    targ_temp_i=round(targ_temp,1)
                 elif not mouseL: stepperSpeed=0
 
                 if on_pH and mouseL:
@@ -1410,6 +1868,7 @@ while alive:
                 elif fout_ORP:
                     printer.fout('ORP_lev',str(ORP_lev))
                     fout_ORP=False
+                    seth2o2()
                 elif not mouseL: stepperSpeed=0
             
                 if on_specgrav and mouseL:
@@ -1464,11 +1923,13 @@ while alive:
                         playfloat=True 
                         fadeinmusic=False
                         printer.fout('playfloat',str(playfloat))
+                        def_p=0
+                        if floatpreset==60 or floatpreset==90: def_p=1
                         msg_obj={
-                            "fade1_light":round(min_fade1,1),
-                            "fade2_light":round(min_fade2,1),
-                            "fade1_music":round(min_fade1_m,1),
-                            "fade2_music":round(min_fade2_m,1),
+                            "fade1_light":round(def_p+(1-def_p)*min_fade1,1),
+                            "fade2_light":round(def_p+(1-def_p)*min_fade2,1),
+                            "fade1_music":round(def_p+(1-def_p)*min_fade1_m,1),
+                            "fade2_music":round(def_p+(1-def_p)*min_fade2_m,1),
                             "colorthereapymode":colorthereapymode                            
                             }
                         client.send(json.dumps(msg_obj))
@@ -1502,7 +1963,6 @@ while alive:
             if settingsscreen and exScr:
                 layer0=settings
                 if on_back and go: printer.fout('custom_duration',str(custom_duration))
-                if on_back and go: printer.fout('max_vol',str(max_vol))
                 if on_back and go: layer0=layer1=layer2=layer3=layer4=0
                 if on_back and go: 
                     reloaded=True
@@ -1577,6 +2037,12 @@ while alive:
                     pygame.draw.line(stage,(255,255,255),(x-1,gradBarTop-vOffset),(x-1,gradBarTop+gradBarHeight-vOffset-1), 1)
                     pygame.draw.line(stage,(  0,  0,  0),(x,  gradBarTop-vOffset),(x,  gradBarTop+gradBarHeight-vOffset-1), 1)
 
+        if audioscreen:
+            #jkl;
+            if on_back and go: audioscreen=False
+            if on_back and go: printer.fout('audioscreen',str(audioscreen))
+            audiowidgets()
+        
         if trendsscreen:
             if on_back and go: trendsscreen=False
             if on_back and go: printer.fout('trendsscreen',str(trendsscreen))
@@ -1586,10 +2052,16 @@ while alive:
         if wifiscreen:
             if on_back and go: 
                 mlock=True
-                if ssidSelect: ssidSelect=False
+                if ssidSelect: 
+                    ssidSelect=False
+                    wifilist=-5
                 else: 
                     wifiscreen=False
                     printer.fout('wifiscreen',str(wifiscreen))
+            
+            if time.time()>ssid_refresh+10:
+                ssid_refresh=time.time()
+                if wifilist==1: wifilist=0
             
             if not ssidSelect:
                 if wifilist<0:
@@ -1637,11 +2109,18 @@ while alive:
                     y=100
                     for i in wlanSorted:
                         if y>420: continue
-                        ssid=status_font.render(i['ssid'],1,(128,183,224))
-                        stage.blit(ssid, (500-ssid.get_rect().width, y))
+                        ssid_w=999
+                        stxt=i['ssid']
+                        ssid=status_font.render(stxt,1,(128,183,224))
+                        ssid_w=ssid.get_rect().width
+                        while ssid_w>250:
+                            stxt=stxt[:-4]+'...'
+                            ssid=status_font.render(stxt,1,(128,183,224))
+                            ssid_w=ssid.get_rect().width
+                        stage.blit(ssid, (400-ssid_w, y))
                         
-                        qualityrect = pygame.Rect(520, y+5, int(i['quality']), 20)
-                        maxrect     = pygame.Rect(520, y+5, 100,               20)
+                        qualityrect = pygame.Rect(420, y+5, int(i['quality']), 20)
+                        maxrect     = pygame.Rect(420, y+5, 100,               20)
                         
                         pygame.draw.rect(stage, (90,110,130),qualityrect, 0)        
                         pygame.draw.rect(stage, (90,90,90),maxrect, 1)        
@@ -1850,19 +2329,20 @@ while alive:
         #================ ================ ================ ================ ================ 
         floatelapsed=(time.time()-floatstart)   #this is the not-testing-for one
         #debugstring=str(int(min_float+min_fade1+min_fade2))
-        if int(1+min_float+min_fade1+min_fade2)==21: floatelapsed=(time.time()-floatstart)*20
-        if int(1+min_float+min_fade1+min_fade2)==22: floatelapsed=(time.time()-floatstart)*1+60*min_shower-5
-        if int(1+min_float+min_fade1+min_fade2)==23: floatelapsed=(time.time()-floatstart)*1+60*(min_shower+1*min_fade1+min_float)-5
+        #================ ================ SPECIAL TEST MODES ================ ================ 
+        #if int(min_float+min_fade1+min_fade2)==21: floatelapsed=(time.time()-floatstart)*60
+        #if int(min_float+min_fade1+min_fade2)==22: floatelapsed=(time.time()-floatstart)*1+60*min_shower-5
+        #if int(min_float+min_fade1+min_fade2)==23: floatelapsed=(time.time()-floatstart)*1+60*(min_shower+1*min_fade1+min_float)-5
         #================ ================ ================ ================ ================ 
         
         debug = default_font.render(debugstring,1,(190,190,178))
-        screen.blit(debug, (55, 50))
+        screen.blit(debug, (55, 450))
         
         #debug = default_font.render(debugstring,1,(90,90,78))
         #screen.blit(debug, (55, 400))
         
         #================ ACTUALLY DRAW TARGET ZONES FOR TESTING ======================
-        pygame.draw.rect(screen, (0, 0, 0),exit_button, 2)    
+        #pygame.draw.rect(screen, (0, 0,100),exit_button, 2)    
 
         #pygame.draw.rect(screen, (100,0,0),sixtymin_button, 2)
         #pygame.draw.rect(screen, (0,100,0),ninetymin_button, 2)
@@ -1876,10 +2356,11 @@ while alive:
         #pygame.draw.rect(screen, (100,0,0),gear_button, 2)
 
         #pygame.draw.rect(screen, (100,0,0),therm_button, 2)
-        #pygame.draw.rect(screen, (0,100,0),runtime_button, 2)
-        #pygame.draw.rect(screen, (0,100,0),wifi_button, 2)
-        #pygame.draw.rect(screen, (100,0,0),trends_button, 2)
+        #pygame.draw.rect(screen, (100,0,0),audio_button, 2)
         #pygame.draw.rect(screen, (100,0,0),levels_button, 2)
+        #pygame.draw.rect(screen, (0,100,0),wifi_button, 2)
+        #pygame.draw.rect(screen, (0,100,0),runtime_button, 2)
+        #pygame.draw.rect(screen, (100,0,0),trends_button, 2)
         
         #pygame.draw.rect(screen, (0,100,0),filter_button, 2)
         #pygame.draw.rect(screen, (0,0,100),h2o2_button, 2)
@@ -1908,26 +2389,37 @@ while alive:
         #pygame.draw.rect(screen, (0,100,0),rt_thresh_button, 2)
         #pygame.draw.rect(screen, (0,100,0),rt_reset_button, 2)
 
+        #pygame.draw.rect(screen, (100,0,0),tr_vert0_button  ,2)
+        #pygame.draw.rect(screen, (100,0,0),tr_vert1_button  ,2)
+        #pygame.draw.rect(screen, (100,0,0),tr_left_button   ,2)
+        #pygame.draw.rect(screen, (100,0,0),tr_leftM_button  ,2)
+        #pygame.draw.rect(screen, (100,0,0),tr_right_button  ,2)
+        #pygame.draw.rect(screen, (100,0,0),tr_rightM_button ,2)
+        #pygame.draw.rect(screen, (100,0,0),tr_day_button    ,2)
+        #pygame.draw.rect(screen, (100,0,0),tr_wk_button     ,2)
+        #pygame.draw.rect(screen, (100,0,0),tr_mo_button     ,2)
+        #pygame.draw.rect(screen, (100,0,0),tr_yr_button     ,2)
+        #pygame.draw.rect(screen, (100,0,0),tr_3yr_button    ,2)
+        #pygame.draw.rect(screen, (100,0,0),tr_live_button   ,2)
+
+        
         if even: pygame.display.update()
         even = not even
 
         #pygame.display.flip()
 
-        t= (time.time()>lastLog+60*60) #update once an hour
-        if (time.time()>lastInit+60): init=True
         
-        #old0=(old_alertMode!=alertMode or old_lightMode!=lightMode)
-        #old1=(old_sleepMode!=sleepMode or old_phase!=phase or old_t_offset!=t_offset)
+        if (time.time()>lastInit+60): init=True
         old1=(old_phase!=phase or old_t_offset!=t_offset)
         old2=((old_max_vol!=max_vol and time.time()>lastsend+.2) or old_targ_temp!=targ_temp_i)
-        #old3=(old_min_fade1!=min_fade1 or old_min_fade2!=min_fade2)
-        #old4=(old_min_fade1_m!=min_fade1_m or old_min_fade2_m!=min_fade2_m)
-        old=(old1 or old2)# or old3 or old4)
-
+        old=(old1 or old2)
         misc=(mouseL!=old_mouseL or remote)
         faded= (fade!=old_fade and (fade==0 or fade==1) and not go)
         
-        if (t or go or old or misc or faded or init):
+        if time.time()>lastLog+60*60: updatelog()
+        #if time.time()>lastLog+15: updatelog()
+        
+        if (go or old or misc or faded or init):
             lastsend=time.time()
             msg_obj={}
             if init or        old_phase!=phase:        msg_obj["phase"]       = phase
@@ -1944,6 +2436,8 @@ while alive:
                 
             msg=json.dumps(msg_obj)                  
             if msg!="{}": client.send(msg)
+            if old_max_vol!=max_vol: printer.fout('max_vol',str(max_vol))
+                
             
             #LOG!!!
             

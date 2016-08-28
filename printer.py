@@ -2,7 +2,7 @@
 
 mypi='shared'
 myname="printer.py"
-version="v.a.1.20"
+version="v.a.1.40"
 abspath='/home/pi/Desktop/'
 
 #=============================================================================================================================================================#
@@ -17,9 +17,8 @@ ip="72.182.78.244"
 myID="_"
 
 try:
-    f=open(abspath+'myID','r')
-    myID=f.readline().strip()
-    f.close()        
+    with open(abspath+'IDcheck', 'r') as id_file: IDcheck = id_file.readline().strip()
+    with open(abspath+'myID',    'r') as id_file:    myID = id_file.readline().strip()
 except: pass
 
 def helloThread(fn,v):
@@ -33,6 +32,7 @@ def helloThread(fn,v):
     p(m)
 
 def pThread(s):
+    if myID!=IDcheck: return
     try: r=requests.post('http://'+ip+'/zerog/getgui.php', params={"mode":"print","s":myID+"> "+s})
     except: pass
 
@@ -72,7 +72,7 @@ def fin(fn):
         f=open(abspath+'var/'+fn,'r')
         dat=f.read()
         f.close()
-        p("read "+fn+" from /var: "+dat)
+        #p("read "+fn+" from /var: "+dat)
         return dat
     except:
         return False
