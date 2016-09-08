@@ -57,13 +57,13 @@ shared_urls = [
     ]
 
 control_urls = [
-    'client_control.py',
-    'globalvars.py',
-    'LED.py',
-    'loader.py',
-    'mdns_control.py',
-    'server_control.py',
-    'unabstractor.py'
+    'control/client_control.py',
+    'control/globalvars.py',
+    'control/LED.py',
+    'control/loader.py',
+    'control/mdns_control.py',
+    'control/server_control.py',
+    'control/unabstractor.py'
     ]
 
 music_urls = ['default.mp3']
