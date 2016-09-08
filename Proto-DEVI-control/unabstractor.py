@@ -3,7 +3,7 @@
 
 mypi='control'
 myname="unabstractor.py"
-version="v.a.1.40"
+version="v.a.1.42"
 abspath='/home/pi/Desktop/'
 
 #=============================================================================================================================================================#
@@ -188,7 +188,9 @@ def temperatureThread():
             os.system('modprobe w1-therm')
             fns = [fn for fn in os.listdir("/sys/bus/w1/devices/")]
             for i in fns:
-                if i[:2]=="28": thermo_sensor = '/sys/bus/w1/devices/'+i+'/w1_slave'
+                if i[:2]=="28": 
+                    thermo_sensor = '/sys/bus/w1/devices/'+i+'/w1_slave'
+                    break
                 else: thermo_sensor = -1
                 
         time.sleep(1)
@@ -449,12 +451,12 @@ def musicThread():
             m+=str(int(time.time()-volume_time))+" | dur:"
             m+=str(volume_dur)
             #print(m)
-            def clamp64(v):
+            def clamp64(v): #60 cuz clipping
                 if v<0: v=0
-                if v>63: v=63
+                if v>60: v=60
                 return int(v)
                 
-            ampvol=.9*ampvol +.1*(volume*63*glb.max_vol)
+            ampvol=.9*ampvol +.1*(volume*60*glb.max_vol)
             if (old_ampvol != ampvol or new_max_vol) and not noAmp:
                 amp.set_volume(clamp64(ampvol))
                 new_max_vol=False
@@ -537,7 +539,7 @@ def getserverupdates():
                             if glb.phase==glb.PHASE_NONE:   setlm(100, quickLight, 100,quickLight)                            
                             if glb.phase==glb.PHASE_SHOWER: setlm(100, quickLight, 100,quickLight)                            
                             if glb.phase==glb.PHASE_FADE1:  setlm(lum_,fade1Light_,  0,fade1Music)
-                            if glb.phase==glb.PHASE_FLOAT:  setlm(lum_,quickLight,   0,quickLight)
+                            if glb.phase==glb.PHASE_FLOAT:  setLED(lum_,quickLight)#,   0,quickLight)
                             if glb.phase==glb.PHASE_FADE2:  setLED(100,fade2Light) #music set below
                             if glb.phase==glb.PHASE_WAIT:   setlm(100, quickLight, 100,quickLight)
                     if 'fadeinmusic' in jk: setMusic(100,fade2Music)
