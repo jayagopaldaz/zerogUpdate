@@ -3,7 +3,7 @@
 
 mypi='gui'
 myname="zerog.py"
-version="v.a.1.40"
+version="v.a.1.42"
 abspath='/home/pi/Desktop/'
 
 #=============================================================================================================================================================#
@@ -200,9 +200,9 @@ except: pass
 audiomode          =   int(printer.fin('audiomode'))
 
 if not solution_runtime: solution_runtime=pump_runtime
-if not rt_filter_max:   rt_filter_max   =  200
-if not rt_uvbulb_max:   rt_uvbulb_max   = 2000
-if not rt_solution_max: rt_solution_max = 3000
+if not rt_filter_max:   rt_filter_max   =   200
+if not rt_uvbulb_max:   rt_uvbulb_max   = 13000
+if not rt_solution_max: rt_solution_max =  3000
 
 if not rt_filter_thresh:   rt_filter_thresh   = .9
 if not rt_uvbulb_thresh:   rt_uvbulb_thresh   = .9
@@ -442,7 +442,7 @@ def tankname():
     #debugstring=str(time.time()-cur_temp_refresh)
     if time.time()>cur_temp_refresh+6: thermoString=time_str(time.time())+" • - °F"
     else: 
-        try: thermoString=time_str(time.time())+" • "+str(round(cur_temp+t_offset,1))+" °F"
+        try: thermoString=time_str(time.time())+" • "+round_s(cur_temp+t_offset,1)+" °F"
         except: thermoString=time_str(time.time())+" • - °F"
     
     
@@ -584,7 +584,8 @@ def trendgraph():
     rnd   =[        1,   1,    0,    2,     0,      0][trendmode['p']]
     suffix=[    ' °F',  '', 'mV',   '', 'lb.', 'sec.'][trendmode['p']]
     if livemode: liveval=[cur_temp+t_offset,pH_lev,ORP_lev,specgrav_lev,lbssalt_lev,min_h2o2*60][trendmode['p']]
-
+    if livemode: liveval=round(liveval,rnd)
+    
     #vals for 1hr interval
     
     if trendmode['v']: 
@@ -622,12 +623,13 @@ def trendgraph():
         x_=x
         y_=y
         
-        if x%150 == 0 and not livemode:
-            tick_time_=time.time()-(w-x)*domain-timeOffset
+        if x%100 == 0 and not livemode:
+            tick_time_=time.time()-(w-x)*domain+timeOffset
             tick_time=''
             if trendmode['h']>=1: tick_time=time_str2(tick_time_)+" "+time_str(tick_time_)
             if trendmode['h']>=3: tick_time=time_str3(tick_time_)
             tick=default_font.render(tick_time,1,(0,128,255))
+            tick=pygame.transform.rotate(tick,-30)
             stage.blit(tick,(103+x,153+h+5))
 
     if val_==0:
@@ -647,21 +649,17 @@ def trendgraph():
         tick=default_font.render('Live Update Mode: '+time_str(time.time()),1,(0,128,255))
         stage.blit(tick,(103+w/2-tick.get_rect().width/2,153+h+5))
     else: 
-        _time_=time.time()-(w-xpos)*domain-timeOffset
+        _time_=time.time()-(w-xpos)*domain+timeOffset
         if trendmode['h']>=1: time_=time_str2(_time_)+" "+time_str(_time_)+", "+time_str3(_time_)
         if trendmode['h']>=3: time_=time_str3(_time_)
     
     pygame.draw.line(graph, (28, 97, 58), (0,h-func(targ_)),(600,h-func(targ_)), 1)
     pygame.draw.line(graph, (56, 94,116), (0,h-func(val_ )),(600,h-func(val_ )), 1)
     pygame.draw.line(graph, (56, 94,116), (xpos,0),         (xpos,h),            1)
-    
-    def dyn_round(v,r):
-        if r==0: return int(v+0)
-        else: return round(v,r)
         
-    targ  = default_font.render(str(dyn_round(targ_,rnd))+suffix,1,( 78,203,124))
-    val   = default_font.render(str(dyn_round(val_, rnd))+suffix,1,(255,255,255))
-    vtime = default_font.render(time_,                     1,(255,255,255))
+    targ  = default_font.render(round_s(targ_,rnd)+suffix,1,( 78,203,124))
+    val   = default_font.render(round_s(val_, rnd)+suffix,1,(255,255,255))
+    vtime = default_font.render(time_,                    1,(255,255,255))
     
     graph.blit(targ, (  595-targ.get_rect().width, h-func(targ_)-20))
 
@@ -941,7 +939,7 @@ def audiowidgets():
             usb_audiofile=usbmedia[usb_index]
             usb_buffer=True
             sendfile(usb_audiofile,abspath+'usb.mp3')
-        except: promt('send audio file exception')
+        except: print('send audio file exception')
     stage.blit(filelist,(170,108))    
 
 import http.server
@@ -1007,6 +1005,7 @@ def rteditbars():
         
     if r2screen:
         ms=str(math.floor(rt_uvbulb_max))
+        if rt_uvbulb_max>=10*1000: ms=str(math.floor(rt_uvbulb_max/1000))+"K"
         ts=str(math.floor(rt_uvbulb_thresh*100))+"%"
         rts="UV  BULB  RUNTIME"
         
@@ -1022,7 +1021,14 @@ def rteditbars():
     stage.blit(maxi,   (265-  maxi.get_rect().width/2, 170))
     stage.blit(thresh, (545-thresh.get_rect().width/2, 170))
 
-    
+
+def alerts():
+    global debugstring
+    debugstring=''
+    if filter_runtime/3600   >=   rt_filter_max * rt_filter_thresh   : debugstring+=' [Filter Runtime Notice] '
+    if uvbulb_runtime/3600   >=   rt_uvbulb_max * rt_uvbulb_thresh   : debugstring+=' [UV-Bulb Runtime Notice] '
+    if solution_runtime/3600 >= rt_solution_max * rt_solution_thresh : debugstring+=' [Solution Runtime Notice] '
+                
 foutprep=0
 def runtimebars():
     global pump_runtime,filter_runtime,uvbulb_runtime,solution_runtime
@@ -1073,11 +1079,11 @@ def runtimebars():
     
 #-----------------------------------------------------------------
 def levelsbars(cur,targ,pH,ORP,sg,ls):
-    curtext  = str(round(cur,1))
-    targtext = str(round(targ,1))
-    pHtext   = str(round(pH,1))
+    curtext  = round_s(cur,1)
+    targtext = round_s(targ,1)
+    pHtext   = round_s(pH,1)
     ORPtext  = str(int(ORP+0))
-    sgtext   = str(round(sg,2))
+    sgtext   = round_s(sg,2)
     lstext   = str(int(ls+0))
     
     cur  = tankname_font.render(curtext, 1,(28,103,124))
@@ -1102,20 +1108,24 @@ def levelsbars(cur,targ,pH,ORP,sg,ls):
     stage.blit(ls,  (575 -   ls.get_rect().width/2, 360-vOffset))        
 
 #-----------------------------------------------------------------
-def custombar(muin,mout,liin,lout,ldur):
+def custombar(muin,mout,liin,lout,dur):
     #asdf
     if muin=='0' or muin=='0.0': muin=mout='Off'
-    muin_=tankname_font.render(muin,1,(28,103,124))
-    mout_=tankname_font.render(mout,1,(28,103,124))
-    liin_=tankname_font.render(liin,1,(28,103,124))
-    lout_=tankname_font.render(lout,1,(28,103,124))
-    ldur_=tankname_font.render(ldur,1,(28,103,124))
+    def minsec(n):
+        min=math.floor(n)
+        sec=int((n-min)*60)
+        return str(min)+':'+('0'+str(sec))[-2:]
+    muin_=tankname_font.render(minsec(muin),1,(28,103,124))
+    mout_=tankname_font.render(minsec(mout),1,(28,103,124))
+    liin_=tankname_font.render(minsec(liin),1,(28,103,124))
+    lout_=tankname_font.render(minsec(lout),1,(28,103,124))
+    dur_ =tankname_font.render(dur,1,(28,103,124))
     
     stage.blit(muin_, (285-muin_.get_rect().width/2, 154-vOffset))        
     stage.blit(mout_, (285-mout_.get_rect().width/2, 254-vOffset))        
     stage.blit(liin_, (530-liin_.get_rect().width/2, 154-vOffset))        
     stage.blit(lout_, (530-lout_.get_rect().width/2, 254-vOffset))        
-    stage.blit(ldur_, (285-ldur_.get_rect().width/2, 382-vOffset))        
+    stage.blit( dur_, (285- dur_.get_rect().width/2, 382-vOffset))        
 
 #-----------------------------------------------------------------
 def gradbar():
@@ -1212,12 +1222,28 @@ def drawgradbar():
             _b=byteclamp(_b*(.3*c_b+.7))
             
         pygame.draw.line(gradsurface, (_r,_g,_b), (x,0),(x,h), 1)
-        pygame.draw.line(gradsurface, (byteclamp(16+1.5*_r),byteclamp(16+1.5*_g),byteclamp(16+1.5*_b),), (x,h-mus_y*h/2),(x,h), 1)
+        #pygame.draw.line(gradsurface, (byteclamp(16+1.5*_r),byteclamp(16+1.5*_g),byteclamp(16+1.5*_b),), (x,h-mus_y*h/2),(x,h), 1)
+        pygame.draw.line(gradsurface, (byteclamp(32+1.5*_r),byteclamp(32+1.5*_g),byteclamp(32+1.5*_b),), (x,h-mus_y*h/2),(x,h), 1)
             
     pygame.draw.line(gradsurface, (0,0,0), (_shower,0),(_shower,h), 1)
     pygame.draw.line(gradsurface, (0,0,0), (_shower+_fade1+_float+_fade2,0),(_shower+_fade1+_float+_fade2,h), 1)
     pygame.draw.line(gradsurface, (0,0,0), (_shower+_fade1+_float+_fade2+_wait,0),(_shower+_fade1+_float+_fade2+_wait,h), 1)
     pygame.draw.line(gradsurface, (0,0,0), (_shower+_fade1+_float+_fade2+_wait+_plo,0),(_shower+_fade1+_float+_fade2+_wait+_plo,h), 1)
+
+#-----------------------------------------------------------------
+def stepperSpeedup(n):
+    global stepperSpeed
+    if   stepperSpeed<.0005: stepperSpeed+=.0001
+    elif stepperSpeed<4: stepperSpeed=(stepperSpeed+(1+n/5))**1.01-(1+n/5)
+
+#-----------------------------------------------------------------
+def round_s(n,d):
+    try:
+        if d==0: return str(math.floor(n))
+        s=str(round(n,d))
+        if s[-(d+1)]!='.': s+='0'
+        return s
+    except: return ''
 
 #-----------------------------------------------------------------
 def dephaser():
@@ -1306,7 +1332,8 @@ seth2o2()
 Thread(target=getserverupdates).start()
 while alive:
     exScr=(not customscreen and not levelsscreen and not wifiscreen and not runtimescreen and not trendsscreen and not audioscreen)
-
+    alerts()
+    
     for e in pygame.event.get(): continue
     #try: debugstring=(str(time.time()%10)[:4]+" : "+str(e.dict['pos'])+" | "+str(pygame.event.get_grab()))
     #except: pass#print('exception@768')
@@ -1431,8 +1458,8 @@ while alive:
             #if on_ninetymin   : layer0 = ninetymin
             #if on_custommin   : layer0 = custommin
             
-            #if on_exit and go and settingsscreen and exScr:
-            if on_exit and go and settingsscreen:
+            #if on_exit and go and settingsscreen:
+            if on_exit and go and settingsscreen and exScr:
                 alive = False
                 printer.p(OOO+"zerogAlive === ending...")
 
@@ -1539,12 +1566,11 @@ while alive:
                 #CUSTOM MUSIC FADEIN--------------------------------
                 if on_cmusicin and mouseL and not mlock:
                     stepper=(pos[0]-cmusicin_button.left) / cmusicin_button.width - .5
-                    if stepper<0 and stepperSpeed==0: min_fade1_m-=.1
-                    if stepper>0 and stepperSpeed==0: min_fade1_m+=.1
+                    if stepper<0 and stepperSpeed==0: min_fade1_m-=1/60
+                    if stepper>0 and stepperSpeed==0: min_fade1_m+=1/60
                     if stepper<0: min_fade1_m-=stepperSpeed
                     if stepper>0: min_fade1_m+=stepperSpeed
-                    if  stepperSpeed<.5: stepperSpeed+=.01
-                    elif stepperSpeed<2: stepperSpeed*=1.08
+                    stepperSpeedup(1/60)
                     if min_fade1_m<0: min_fade1_m=0
                     if min_fade1_m>999: min_fade1_m=999
                     if min_fade1_m+min_fade2_m>custom_duration:
@@ -1563,12 +1589,11 @@ while alive:
                 #CUSTOM MUSIC FADEOUT--------------------------------
                 if on_cmusicout and mouseL and not mlock:
                     stepper=(pos[0]-cmusicout_button.left) / cmusicout_button.width - .5
-                    if stepper<0 and stepperSpeed==0: min_fade2_m-=.1
-                    if stepper>0 and stepperSpeed==0: min_fade2_m+=.1
+                    if stepper<0 and stepperSpeed==0: min_fade2_m-=1/60
+                    if stepper>0 and stepperSpeed==0: min_fade2_m+=1/60
                     if stepper<0: min_fade2_m-=stepperSpeed
                     if stepper>0: min_fade2_m+=stepperSpeed
-                    if  stepperSpeed<.5: stepperSpeed+=.01
-                    elif stepperSpeed<2: stepperSpeed*=1.08
+                    stepperSpeedup(1/60)
                     if min_fade2_m<0: min_fade2_m=0
                     if min_fade2_m>999: min_fade2_m=999
                     if min_fade1_m+min_fade2_m>custom_duration:
@@ -1587,12 +1612,11 @@ while alive:
                 #CUSTOM LIGHT FADEIN--------------------------------
                 if on_clightin and mouseL and not mlock:
                     stepper=(pos[0]-clightin_button.left) / clightin_button.width - .5
-                    if stepper<0 and stepperSpeed==0: min_fade1-=.1
-                    if stepper>0 and stepperSpeed==0: min_fade1+=.1
+                    if stepper<0 and stepperSpeed==0: min_fade1-=1/60
+                    if stepper>0 and stepperSpeed==0: min_fade1+=1/60
                     if stepper<0: min_fade1-=stepperSpeed
                     if stepper>0: min_fade1+=stepperSpeed
-                    if  stepperSpeed<.5: stepperSpeed+=.01
-                    elif stepperSpeed<2: stepperSpeed*=1.08
+                    stepperSpeedup(1/60)
                     if min_fade1<0: min_fade1=0
                     if min_fade1>999: min_fade1=999
                     fout_customLFadein=True
@@ -1608,12 +1632,11 @@ while alive:
                 #CUSTOM LIGHT FADEOUT--------------------------------
                 if on_clightout and mouseL and not mlock:
                     stepper=(pos[0]-clightout_button.left) / clightout_button.width - .5
-                    if stepper<0 and stepperSpeed==0: min_fade2-=.1
-                    if stepper>0 and stepperSpeed==0: min_fade2+=.1
+                    if stepper<0 and stepperSpeed==0: min_fade2-=1/60
+                    if stepper>0 and stepperSpeed==0: min_fade2+=1/60
                     if stepper<0: min_fade2-=stepperSpeed
                     if stepper>0: min_fade2+=stepperSpeed
-                    if  stepperSpeed<.5: stepperSpeed+=.01
-                    elif stepperSpeed<2: stepperSpeed*=1.08
+                    stepperSpeedup(1/60)
                     if min_fade2<0: min_fade2=0
                     if min_fade2>999: min_fade2=999
                     fout_customLFadeout=True
@@ -1634,8 +1657,7 @@ while alive:
                     if stepper>0 and stepperSpeed==0: custom_duration+=1
                     if stepper<0: custom_duration-=stepperSpeed
                     if stepper>0: custom_duration+=stepperSpeed
-                    if  stepperSpeed<.5: stepperSpeed+=.01
-                    elif stepperSpeed<4: stepperSpeed*=1.08
+                    stepperSpeedup(1)
                     if custom_duration<(min_fade1+min_fade2): custom_duration=(min_fade1+min_fade2)
                     if custom_duration>999.9: custom_duration=999
                     floatpreset=math.floor(custom_duration)
@@ -1681,11 +1703,11 @@ while alive:
                 if on_tr_vert1  and go: trendmode['v']=False
                 if on_tr_leftM  and go: trendmode['x']=len(loglines)-10*domain
                 if on_tr_rightM and go: trendmode['x']=0
-                if on_tr_left   and go: trendmode['x']+=1
-                if on_tr_right  and go: trendmode['x']-=1
+                if on_tr_left   and go: trendmode['x']-=1
+                if on_tr_right  and go: trendmode['x']+=1
                 
                 if go and (on_any_horiz or on_tr_leftM or on_tr_rightM or on_tr_left or on_tr_right):
-                    if trendmode['x']<0: trendmode['x']=0
+                    if trendmode['x']>0: trendmode['x']=0
                     trendarr=[0]*800
                     repop_trendarr()
                 
@@ -1713,17 +1735,29 @@ while alive:
                         if r3screen: rtmax=rt_solution_max
                         
                         stepper=(pos[0]-tcur_button.left) / tcur_button.width - .5
-                        if stepper<0 and stepperSpeed==0: rtmax-=.5
-                        if stepper>0 and stepperSpeed==0: rtmax+=.5
-                        if stepper<0: rtmax-=stepperSpeed*5
-                        if stepper>0: rtmax+=stepperSpeed*5
-                        if stepperSpeed<.5: stepperSpeed+=.1
-                        elif stepperSpeed<2: stepperSpeed*=1.1
-                        if rtmax<0: rtmax=0
-                        if rtmax>9999: rtmax=9999
+                        if r2screen and rtmax>=10*1000:
+                            if stepper>0 and stepperSpeed==0: rtmax+=1000
+                            if stepper<0 and stepperSpeed==0 and rtmax>10*1000: rtmax-=1000
+                            elif stepper<0 and stepperSpeed==0: rtmax-=1
+                            stepperSpeed=1
+                            #if stepper<0: rtmax-=stepperSpeed*50
+                            #if stepper>0: rtmax+=stepperSpeed*50
+                            #stepperSpeedup(5)
+                            if rtmax<0: rtmax=0
+                            if rtmax>999*1000: rtmax=999*1000
+                        
+                        else:
+                            if stepper<0 and stepperSpeed==0: rtmax-=1
+                            if stepper>0 and stepperSpeed==0: rtmax+=1
+                            if stepper<0: rtmax-=stepperSpeed*10
+                            if stepper>0: rtmax+=stepperSpeed*10
+                            stepperSpeedup(.5)
+                            if rtmax<0: rtmax=0
+                            if not r2screen and rtmax>9999: rtmax=9999
 
                         if r1screen: rt_filter_max=rtmax
                         if r2screen: rt_uvbulb_max=rtmax
+                        if r2screen and rtmax>9999: rt_uvbulb_max=int(rtmax/1000)*1000
                         if r3screen: rt_solution_max=rtmax
 
                         fout_rt_max=True
@@ -1744,10 +1778,9 @@ while alive:
                         stepper=(pos[0]-ttarg_button.left) / ttarg_button.width - .5
                         if stepper<0 and stepperSpeed==0: rtthresh-=.01
                         if stepper>0 and stepperSpeed==0: rtthresh+=.01
-                        if stepper<0: rtthresh-=stepperSpeed*.005
-                        if stepper>0: rtthresh+=stepperSpeed*.005
-                        if  stepperSpeed<.5: stepperSpeed+=.02
-                        elif stepperSpeed<2: stepperSpeed*=1.1
+                        if stepper<0: rtthresh-=stepperSpeed
+                        if stepper>0: rtthresh+=stepperSpeed
+                        stepperSpeedup(.01)
                         if rtthresh<0: rtthresh=0
                         if rtthresh>1: rtthresh=1
 
@@ -1802,10 +1835,9 @@ while alive:
                     stepper=(pos[0]-tcur_button.left) / tcur_button.width - .5
                     if stepper<0 and stepperSpeed==0: ct-=.1
                     if stepper>0 and stepperSpeed==0: ct+=.1
-                    if stepper<0: ct-=stepperSpeed*.5
-                    if stepper>0: ct+=stepperSpeed*.5
-                    if stepperSpeed<.5: stepperSpeed+=.03
-                    elif stepperSpeed<2: stepperSpeed*=1.1
+                    if stepper<0: ct-=stepperSpeed
+                    if stepper>0: ct+=stepperSpeed
+                    stepperSpeedup(.1)
                     if ct<-99: ct=-99
                     if ct>999: ct=999
                     fout_currentTemperature=True
@@ -1825,10 +1857,9 @@ while alive:
                     stepper=(pos[0]-ttarg_button.left) / ttarg_button.width - .5
                     if stepper<0 and stepperSpeed==0: targ_temp-=.1
                     if stepper>0 and stepperSpeed==0: targ_temp+=.1
-                    if stepper<0: targ_temp-=stepperSpeed*.5
-                    if stepper>0: targ_temp+=stepperSpeed*.5
-                    if  stepperSpeed<.5: stepperSpeed+=.02
-                    elif stepperSpeed<2: stepperSpeed*=1.1
+                    if stepper<0: targ_temp-=stepperSpeed
+                    if stepper>0: targ_temp+=stepperSpeed
+                    stepperSpeedup(.1)
                     if targ_temp<32: targ_temp=32
                     if targ_temp>120: targ_temp=120
                     fout_targetTemperature=True
@@ -1842,10 +1873,9 @@ while alive:
                     stepper=(pos[0]-pH_button.left) / pH_button.width - .5
                     if stepper<0 and stepperSpeed==0: pH_lev-=.1
                     if stepper>0 and stepperSpeed==0: pH_lev+=.1
-                    if stepper<0: pH_lev-=stepperSpeed*.2
-                    if stepper>0: pH_lev+=stepperSpeed*.2
-                    if  stepperSpeed<.5: stepperSpeed+=.02
-                    elif stepperSpeed<2: stepperSpeed*=1.1
+                    if stepper<0: pH_lev-=stepperSpeed
+                    if stepper>0: pH_lev+=stepperSpeed
+                    stepperSpeedup(.1)
                     if pH_lev<0: pH_lev=0
                     if pH_lev>14: pH_lev=14
                     fout_pH=True
@@ -1860,8 +1890,7 @@ while alive:
                     if stepper>0 and stepperSpeed==0: ORP_lev+=1
                     if stepper<0: ORP_lev-=stepperSpeed
                     if stepper>0: ORP_lev+=stepperSpeed
-                    if stepperSpeed<.5: stepperSpeed+=.1
-                    elif stepperSpeed<2: stepperSpeed*=1.1
+                    stepperSpeedup(1)
                     if ORP_lev<0: ORP_lev=0
                     if ORP_lev>800: ORP_lev=800                        
                     fout_ORP=True
@@ -1875,10 +1904,9 @@ while alive:
                     stepper=(pos[0]-specgrav_button.left) / specgrav_button.width - .5
                     if stepper<0 and stepperSpeed==0: specgrav_lev-=.01
                     if stepper>0 and stepperSpeed==0: specgrav_lev+=.01
-                    if stepper<0: specgrav_lev-=stepperSpeed*.06
-                    if stepper>0: specgrav_lev+=stepperSpeed*.06
-                    if  stepperSpeed<.5: stepperSpeed+=.02
-                    elif stepperSpeed<1: stepperSpeed*=1.1
+                    if stepper<0: specgrav_lev-=stepperSpeed
+                    if stepper>0: specgrav_lev+=stepperSpeed
+                    stepperSpeedup(.01)
                     if specgrav_lev<0: specgrav_lev=0
                     if specgrav_lev>4: specgrav_lev=14
                     fout_specgrav=True
@@ -1893,8 +1921,7 @@ while alive:
                     if stepper>0 and stepperSpeed==0: lbssalt_lev+=1
                     if stepper<0: lbssalt_lev-=stepperSpeed
                     if stepper>0: lbssalt_lev+=stepperSpeed
-                    if stepperSpeed<.5: stepperSpeed+=.1
-                    elif stepperSpeed<4: stepperSpeed*=1.1
+                    stepperSpeedup(1)
                     if lbssalt_lev<0: lbssalt_lev=0
                     if lbssalt_lev>4000: lbssalt_lev=4000                        
                     fout_lbs=True
@@ -2155,7 +2182,7 @@ while alive:
                     while not connected and time.time()<ctime+7:
                         ctxt+='.'
                         connect=status_font.render(ctxt,1,(64,108,160))
-                        screen.blit(trends,(0,0))
+                        screen.blit(wifi,(0,0))
                         screen.blit(connect, (300, 200))
                         pygame.display.update()
                         os.system('ping -c1 google.com > '+abspath+'var/ping_result')
@@ -2163,14 +2190,19 @@ while alive:
                         connected=("unknown host" not in pingres and pingres!='')
                         time.sleep(.5)
                     
-                    if connected: result="Connected :D"
-                    else: result="I couldn't connect :|"
+                    result2=''
+                    if connected: result1="Connected :D"
+                    else: 
+                        result1="It's taking a while to connect."
+                        result2="I'll keep trying in the background."
                     
-                    connect=status_font.render(result,1,(64,108,160))
-                    screen.blit(trends,(0,0))
-                    screen.blit(connect, (400-connect.get_rect().width/2, 200))
+                    connect1=status_font.render(result1,1,(64,108,160))
+                    connect2=status_font.render(result2,1,(64,108,160))
+                    screen.blit(wifi,(0,0))
+                    screen.blit(connect1, (400-connect1.get_rect().width/2, 200))
+                    screen.blit(connect2, (400-connect2.get_rect().width/2, 240))
                     pygame.display.update()
-                    time.sleep(2)
+                    time.sleep(4)
                     #do the wpa_conf thing
                     
                     wifiscreen=False
@@ -2207,10 +2239,10 @@ while alive:
             if on_back and go: customscreen=False
             if on_back and go: printer.fout('customscreen',str(customscreen))                
             custombar(
-                str(round(min_fade1_m,1)),
-                str(round(min_fade2_m,1)),
-                str(round(min_fade1,1)),
-                str(round(min_fade2,1)),
+                min_fade1_m,
+                min_fade2_m,
+                min_fade1,
+                min_fade2,
                 str(math.floor(custom_duration)))
             #asdf
             if colorthereapymode: stage.blit(check,(424, 381-vOffset))
@@ -2262,10 +2294,9 @@ while alive:
                 if floatelapsed/60<min_shower+(min_fade1+min_fade2)+min_float+min_wait+min_plo+min_h2o2: phase+=PHASE_H2O2
             
             if tfade>0:
-                blackout.set_alpha(tfade*192)
+                blackout.set_alpha(tfade*64)#192)
                 screen.blit(blackout,(0,0))
-                #if floatscreen and not settingsscreen: screen.blit(blackout,(0,0))
-            
+                
             if floatelapsed/60>totalDuration:
                 playfloat=False
                 floatInProgress=False
@@ -2334,7 +2365,7 @@ while alive:
         #if int(min_float+min_fade1+min_fade2)==22: floatelapsed=(time.time()-floatstart)*1+60*min_shower-5
         #if int(min_float+min_fade1+min_fade2)==23: floatelapsed=(time.time()-floatstart)*1+60*(min_shower+1*min_fade1+min_float)-5
         #================ ================ ================ ================ ================ 
-        
+        #debugstring=str(fadeinmusic)
         debug = default_font.render(debugstring,1,(190,190,178))
         screen.blit(debug, (55, 450))
         
@@ -2456,7 +2487,7 @@ while alive:
             #old_min_fade1_m=min_fade1_m
             #old_min_fade2_m=min_fade2_m
             
-#=============================================================================================================================================================#
+#============================================================================================================================================================#
 
 pygame.quit()
 printer.goodbye(myname,version)
