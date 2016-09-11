@@ -7,6 +7,18 @@ version="v.a.1.42"
 abspath='/home/pi/Desktop/'
 
 #=============================================================================================================================================================#
+#
+#    DESCRIPTION AND NOTES:
+#
+#    This is the main module for the graphics user interface. It manages all input from the user and sends it to the CONTROL-PI via the ethernet cord.
+#    A connection is set up between the GUI-PI and the CONTROL-PI by first discovering the CONTROL-PI's ip (mdns) and then opening server and client streams.
+#    Currently the float cycle is managed from here by sending ques at appropriate times, but we need to change that. The float cycle should be managed by
+#    the CONTROL-PI, and any adjustments to the float cycle made from the GUI-PI should be sent as a JSON obj with all parameters for a complete float cycle.
+#
+#=============================================================================================================================================================#
+
+
+######### LIBRARIES #########
 import printer
 import os
 import math
@@ -15,24 +27,25 @@ import pygame
 import json
 from pygame.locals import *
 from threading import Thread
-import server_hmi as server
-import client_hmi as client
+import server_hmi as server               
+import client_hmi as client               
 
+
+######### INITIALIZE STUFF #########
 printer.hello(myname,version)
 
 control_ip=False
 def socketboot():
-    global control_ip
+    global control_ip                     # Use zeroconf to discover the CONTROL-PI's IP
     import mdns_hmi as mdns
-    control_ip= (mdns.info.properties[b'eth0']).decode('utf-8')
-    my_ip=mdns.ip
+    my_ip       = (mdns.ip)
+    control_ip  = (mdns.info.properties[b'eth0']).decode('utf-8')
+    client.HOST = control_ip
     print("control's ip: "+control_ip)
-    client.HOST=control_ip
     while not server.ready: continue
-    Thread(target=server.init).start()
-    Thread(target=client.init).start()
-
-#Thread(target=socketboot).start()
+    Thread(target=server.init).start()    # This will actually open the server stream
+    Thread(target=client.init).start()    # This will actually open the client stream
+#Thread(target=socketboot).start()         # Use this for async socketboot
 socketboot()
 
 pygame.init()
@@ -40,55 +53,47 @@ pygame.display.init()
 pygame.display.set_caption("Float Control "+version)
 pygame.mouse.set_visible(0)
 pygame.font.init()
-
 screen=pygame.display.set_mode((800, 480), NOFRAME|RLEACCEL)
 stage=pygame.Surface((800,480))
 
-#================================ SOME GLOBAL VARIABLES ================================                
-debugstring=''
-t_offset=0
-max_vol=.65
-ct=78.1
-old_cur_temp=0
-cur_temp=0
-targ_temp=93.5
-pH_lev=7.0
-ORP_lev=200
-specgrav_lev=1.25
-lbssalt_lev=0
-p_heater1234="----"
-thermoString=""
-remote=False
-init=True
-even=False
 
-last_rt=time.time()
-rt_total_start=1468092055
+######### GLOBAL VARIABLES #########
+debugstring       = ''            #
+ct                = 78.1          # current temperature
+t_offset          = 0             # temperature offset from the RAW temperature reading that comes from the CONTROL-PI
+old_cur_temp      = 0             # most of these temperature things are used while calibrating
+cur_temp          = 0             #
+targ_temp         = 93.5          #
+pH_lev            = 7.2           #
+ORP_lev           = 200           #
+specgrav_lev      = 1.25          #
+lbssalt_lev       = 0             #
+max_vol           = .65           #
+sendAll           = True          #
+even              = False         # we usually update the frame every other loop cycle
+last_rt           = time.time()   # rt stands for runtime
+stepperSpeed      = 0             # used to make +/- dials speed up the longer you hold them
+fade              = 1             # used to control how much to dim the display sometimes
+gradsurface       = False         # the gradient that shows the float cycle
+prog              = 0             # progress through the float cycle in pixels (used for a progress bar over the gradient)
+lastsend          = 0             # using this to prevent a flood of client sends when the user controls a touch dial (mostly just max_vol i think)
+floatelapsed      = 0             # progress through the float cycle in minutes (the variable is a float)
+status_str        = "READY"       #
+timeleft_str      = "READY"       #
+phase             = -3            # current float cycle phase
+stopcount         = False         # for anything that uses a countdown timer
+lightMode         = True          #
+alertMode         = False         #
+audiomode         = AUDIO_DEFAULT # 0=default, 1=usb, 2=aux
+AUDIO_DEFAULT     = 0             #
+AUDIO_USB         = 1             #
+AUDIO_AUX         = 2             #
+colorthereapymode = False         #
+wlanSorted        = []            # wifi stuff
+ssidSelect        = False         # wifi stuff
+ssid_refresh      = 0             # wifi stuff
+pwdSelect         = ''            # wifi stuff
 
-vOffset=26
-minAlpha=25
-gradalpha=0
-gradsurface=False
-stepperSpeed=0
-fade=1
-prog=0
-lastPrint=0
-lastsend=0
-floatelapsed=0
-status_str="READY"
-phase=-3
-stopcount=False
-lightMode=True
-alertMode=False
-colorthereapymode=False
-timeleft_str="READY"
-wlanSorted=[]
-ssidSelect=False
-ssid_refresh=0
-pwdSelect=''
-audiomode=0
-
-#sleepMode=False
 try: colvals=json.loads(printer.fin('colvals'))
 except: colvals={"colval_r":1.0,"colval_g":0.7,"colval_b":1.0,"colval_w":1.0}
 print("this is .fin colvals:"+str(colvals))
@@ -293,7 +298,6 @@ layer2=False
 layer3=False
 layer4=False
 start=time.time()
-gradalpha=64
 alpha0=255
 alpha1=255
 alpha2=255
@@ -304,43 +308,43 @@ screens_BEGIN=screens_END=0
 #================================ BUTTON RECTANGLES ================================                
 exit_button      = pygame.Rect(0, 0, 40, 40)
 
-sixtymin_button  = pygame.Rect(116, 204-vOffset, 140,140)
-ninetymin_button = pygame.Rect(322, 204-vOffset, 140,140)
-custommin_button = pygame.Rect(528, 204-vOffset, 140,140)
+sixtymin_button  = pygame.Rect(116, 204-26, 140,140)
+ninetymin_button = pygame.Rect(322, 204-26, 140,140)
+custommin_button = pygame.Rect(528, 204-26, 140,140)
 
-back_button      = pygame.Rect( 56,  78-vOffset, 76,76)
-play_button      = pygame.Rect(190, 340-vOffset, 94,98)
-stop_button      = pygame.Rect(505, 340-vOffset, 94,98)
-sleep_button     = pygame.Rect( 60, 352-vOffset, 76,76)
+back_button      = pygame.Rect( 56,  78-26, 76,76)
+play_button      = pygame.Rect(190, 340-26, 94,98)
+stop_button      = pygame.Rect(505, 340-26, 94,98)
+sleep_button     = pygame.Rect( 60, 352-26, 76,76)
 
-gear_button      = pygame.Rect(668, 352-vOffset, 76,76)
+gear_button      = pygame.Rect(668, 352-26, 76,76)
 
 levels_button    = pygame.Rect(0,0,1,1) #levels and therm are named pretty backwardly !!
-audio_button     = pygame.Rect( 60, 78+(352-78)/2-vOffset, 76,76)
-therm_button     = pygame.Rect( 60, 352-vOffset, 76,76)
-wifi_button      = pygame.Rect(668,  78-vOffset, 76,76)
-runtime_button   = pygame.Rect(668, 78+(352-78)/2-vOffset, 76,76)
-trends_button    = pygame.Rect(668, 352-vOffset, 76,76)
+audio_button     = pygame.Rect( 60, 78+(352-78)/2-26, 76,76)
+therm_button     = pygame.Rect( 60, 352-26, 76,76)
+wifi_button      = pygame.Rect(668,  78-26, 76,76)
+runtime_button   = pygame.Rect(668, 78+(352-78)/2-26, 76,76)
+trends_button    = pygame.Rect(668, 352-26, 76,76)
 
-filter_button    = pygame.Rect(170,  80-vOffset, 160,160)
-h2o2_button      = pygame.Rect(460,  80-vOffset, 160,160)
-volume_button    = pygame.Rect(170-20, 280-vOffset, 160+30,160)
-custom_button    = pygame.Rect(400, 270-vOffset, 270,160)
+filter_button    = pygame.Rect(170,  80-26, 160,160)
+h2o2_button      = pygame.Rect(460,  80-26, 160,160)
+volume_button    = pygame.Rect(170-20, 280-26, 160+30,160)
+custom_button    = pygame.Rect(400, 270-26, 270,160)
 
-cmusicin_button  = pygame.Rect(160, 130-vOffset, 245,100)
-cmusicout_button = pygame.Rect(160, 230-vOffset, 245,100)
-clightin_button  = pygame.Rect(405, 130-vOffset, 245,100)
-clightout_button = pygame.Rect(405, 230-vOffset, 245,100)
-clength_button   = pygame.Rect(160, 360-vOffset, 245,100)
-ccol_button      = pygame.Rect(660,  55-vOffset,  95,390)
-ctherapy_button  = pygame.Rect(410, 370-vOffset,  76, 76)
+cmusicin_button  = pygame.Rect(160, 130-26, 245,100)
+cmusicout_button = pygame.Rect(160, 230-26, 245,100)
+clightin_button  = pygame.Rect(405, 130-26, 245,100)
+clightout_button = pygame.Rect(405, 230-26, 245,100)
+clength_button   = pygame.Rect(160, 360-26, 245,100)
+ccol_button      = pygame.Rect(660,  55-26,  95,390)
+ctherapy_button  = pygame.Rect(410, 370-26,  76, 76)
 
-tcur_button      = pygame.Rect(155,  70-vOffset, 270,120)
-ttarg_button     = pygame.Rect(440,  70-vOffset, 270,120)
-pH_button        = pygame.Rect(155, 200-vOffset, 270,120)
-ORP_button       = pygame.Rect(440, 200-vOffset, 270,120)
-specgrav_button  = pygame.Rect(155, 330-vOffset, 270,120)
-lbssalt_button   = pygame.Rect(440, 330-vOffset, 270,120)
+tcur_button      = pygame.Rect(155,  70-26, 270,120)
+ttarg_button     = pygame.Rect(440,  70-26, 270,120)
+pH_button        = pygame.Rect(155, 200-26, 270,120)
+ORP_button       = pygame.Rect(440, 200-26, 270,120)
+specgrav_button  = pygame.Rect(155, 330-26, 270,120)
+lbssalt_button   = pygame.Rect(440, 330-26, 270,120)
 
 tr_vert0_button  = pygame.Rect( 53,143,40,40)
 tr_vert1_button  = pygame.Rect( 53,193,40,40)
@@ -360,9 +364,9 @@ tr_live_button   = pygame.Rect(708,393,40,40)
 rt_filter_button = pygame.Rect(71,149,680,44)
 rt_uvbulb_button = pygame.Rect(71,219,680,44)
 rt_salt_button   = pygame.Rect(71,289,680,44)
-rt_max_button    = pygame.Rect(115, 160-vOffset, 270,150)
-rt_thresh_button = pygame.Rect(400, 160-vOffset, 270,150)
-rt_reset_button  = pygame.Rect(300, 330-vOffset, 200,150)
+rt_max_button    = pygame.Rect(115, 160-26, 270,150)
+rt_thresh_button = pygame.Rect(400, 160-26, 270,150)
+rt_reset_button  = pygame.Rect(300, 330-26, 200,150)
 
 gradbar_button   = pygame.Rect(gradBarLeft,gradBarTop,gradBarWidth,gradBarHeight)
 
@@ -458,13 +462,13 @@ def tankname():
     if floatInProgress and floatscreen and not settingsscreen:
         tx=prog-timeelapsed.get_rect().width/2
         if tx<gradBarLeft+10: tx=gradBarLeft+10
-        stage.blit(timeelapsed, (tx,gradBarTop+gradBarHeight+20-vOffset-timeelapsed.get_rect().height))
+        stage.blit(timeelapsed, (tx,gradBarTop+gradBarHeight+20-26-timeelapsed.get_rect().height))
 
 #-----------------------------------------------------------------
 def statusbar(text):
     status=status_font.render(text,1,(128,203,224))
     status.set_alpha(alpha0)
-    stage.blit(status, (400-status.get_rect().width/2, 374-vOffset))
+    stage.blit(status, (400-status.get_rect().width/2, 374-26))
 
 
 #-----------------------------------------------------------------
@@ -865,13 +869,13 @@ def audiowidgets():
     filelist = pygame.Surface((w,h))
     filelist.fill((22,27,33))
     
-    if audiomode==0: 
+    if audiomode==AUDIO_DEFAULT: 
         t1=default_font.render('Default', 1,(64,208,255))
         t2=default_font.render('Brian Eno - Ambient Music', 1,(64,208,255))
         filelist.blit(t1, (w/2-t1.get_rect().width/2, h/2-22))
         filelist.blit(t2, (w/2-t2.get_rect().width/2, h/2))        
             
-    if audiomode==1:
+    if audiomode==AUDIO_USB:
         #debugstring=str(pos)
         if mx>665 and mx<740 and my> 50 and my<100 and mouseL: 
             usb_yoffset+=(1+stepperSpeed)
@@ -917,20 +921,20 @@ def audiowidgets():
             stage.blit(f2, (190, 108+h+33))
             stage.blit(f3, (190, 108+h+53))
         
-    if audiomode==2:
+    if audiomode==AUDIO_AUX:
         t=default_font.render('Auxiliary Audio Mode Enabled', 1,(64,208,255))
         filelist.blit(t, (w/2-t.get_rect().width/2, h/2-15))
     
     if mx>50 and mx<150 and go and not mlock:
-        if my>150 and my<250: audiomode=0
+        if my>150 and my<250: audiomode=AUDIO_DEFAULT
         if my>250 and my<350: 
-            audiomode=1
+            audiomode=AUDIO_USB
             get_usbmedia()
             usb_yoffset=0
             usb_index=-1
             usb_audiofile=''            
-        if my>350 and my<450: audiomode=2
-        if not (usb_buffer and audiomode==1): client.send(json.dumps({'audiomode':audiomode}))            
+        if my>350 and my<450: audiomode=AUDIO_AUX
+        if not (usb_buffer and audiomode==AUDIO_USB): client.send(json.dumps({'audiomode':audiomode}))            
     
     if mx>170 and mx<170+w and my>108 and my<108+h and go:
         #jkl;
@@ -1093,19 +1097,19 @@ def levelsbars(cur,targ,pH,ORP,sg,ls):
     sg   = tankname_font.render(sgtext,  1,(28,103,124))
     ls   = tankname_font.render(lstext,  1,(28,103,124))
 
-    #(155,  70-vOffset, 270,120)
-    #(440,  70-vOffset, 270,120)
-    #(155, 200-vOffset, 270,120)
-    #(440, 200-vOffset, 270,120)
-    #(155, 330-vOffset, 270,120)
-    #(440, 330-vOffset, 270,120)
+    #(155,  70-26, 270,120)
+    #(440,  70-26, 270,120)
+    #(155, 200-26, 270,120)
+    #(440, 200-26, 270,120)
+    #(155, 330-26, 270,120)
+    #(440, 330-26, 270,120)
     #asdf
-    stage.blit(cur, (290 -  cur.get_rect().width/2, 100-vOffset))        
-    stage.blit(targ,(575 - targ.get_rect().width/2, 100-vOffset))        
-    stage.blit(pH,  (290 -   pH.get_rect().width/2, 235-vOffset))        
-    stage.blit(ORP, (575 -  ORP.get_rect().width/2, 235-vOffset))        
-    stage.blit(sg,  (290 -   sg.get_rect().width/2, 360-vOffset))        
-    stage.blit(ls,  (575 -   ls.get_rect().width/2, 360-vOffset))        
+    stage.blit(cur, (290 -  cur.get_rect().width/2, 100-26))        
+    stage.blit(targ,(575 - targ.get_rect().width/2, 100-26))        
+    stage.blit(pH,  (290 -   pH.get_rect().width/2, 235-26))        
+    stage.blit(ORP, (575 -  ORP.get_rect().width/2, 235-26))        
+    stage.blit(sg,  (290 -   sg.get_rect().width/2, 360-26))        
+    stage.blit(ls,  (575 -   ls.get_rect().width/2, 360-26))        
 
 #-----------------------------------------------------------------
 def custombar(muin,mout,liin,lout,dur):
@@ -1121,33 +1125,31 @@ def custombar(muin,mout,liin,lout,dur):
     lout_=tankname_font.render(minsec(lout),1,(28,103,124))
     dur_ =tankname_font.render(dur,1,(28,103,124))
     
-    stage.blit(muin_, (285-muin_.get_rect().width/2, 154-vOffset))        
-    stage.blit(mout_, (285-mout_.get_rect().width/2, 254-vOffset))        
-    stage.blit(liin_, (530-liin_.get_rect().width/2, 154-vOffset))        
-    stage.blit(lout_, (530-lout_.get_rect().width/2, 254-vOffset))        
-    stage.blit( dur_, (285- dur_.get_rect().width/2, 382-vOffset))        
+    stage.blit(muin_, (285-muin_.get_rect().width/2, 154-26))        
+    stage.blit(mout_, (285-mout_.get_rect().width/2, 254-26))        
+    stage.blit(liin_, (530-liin_.get_rect().width/2, 154-26))        
+    stage.blit(lout_, (530-lout_.get_rect().width/2, 254-26))        
+    stage.blit( dur_, (285- dur_.get_rect().width/2, 382-26))        
 
 #-----------------------------------------------------------------
 def gradbar():
     if gradsurface: 
         gradsurface.set_alpha(math.floor(.65*255)) # 65% grad bar... remember ;) ?
-        stage.blit(gradsurface, (gradBarLeft, gradBarTop-vOffset))
+        stage.blit(gradsurface, (gradBarLeft, gradBarTop-26))
         
     m1 = default_font.render("5min",1,(140,140,128))
     m2 = default_font.render(str(math.floor(min_float+min_shower+(min_fade1+min_fade2)))+"min",1,(140,140,128))
-    stage.blit(m1, (gradBarLeft+_shower, gradBarTop-20-vOffset))
-    stage.blit(m2, (gradBarLeft+_shower+(_fade1+_fade2)+_float-0*m2.get_rect().width, gradBarTop-20-vOffset))
+    stage.blit(m1, (gradBarLeft+_shower, gradBarTop-20-26))
+    stage.blit(m2, (gradBarLeft+_shower+(_fade1+_fade2)+_float-0*m2.get_rect().width, gradBarTop-20-26))
     
 #-----------------------------------------------------------------
 def drawgradbar():
     global gradsurface
     global progbar
-    global gradalpha
     global gradBarWidth
     global gradBarHeight
     global _shower,_fade1,_float,_fade2,_wait,_plo,_filter
     global totalDuration
-    gradalpha=minAlpha
     
     h=gradBarHeight
     w=gradBarWidth
@@ -1287,7 +1289,6 @@ def getserverupdates():
                 if 'fthermo'    in jk: 
                     cur_temp=j['fthermo']
                     cur_temp_refresh=time.time()
-                #old_sleepMode=sleepMode=not lightMode
             time.sleep(.1)
     except: print('serverupdate exception')
     
@@ -1295,9 +1296,9 @@ reason=status_font.render("Are both override switches set to OFF?", 1, (194,184,
 reasonSurface.blit(reason,(400-reason.get_rect().width/2,240-reason.get_rect().height/2))
 
 os.system("sudo udisks --unmount /dev/sda1")
-lastInit=time.time()-10
+last_sendAll=time.time()-10
 if trendsscreen: readlog()
-if audioscreen and audiomode==1: get_usbmedia()
+if audioscreen and audiomode==AUDIO_USB: get_usbmedia()
 
 #================================ THE MAIN LOOP ================================                
 if settingsscreen and manualfilter: layer1=filter
@@ -1314,7 +1315,6 @@ mlock=False
 #old_alertMode=alertMode
 old_phase=phase
 old_fade=fade
-#old_sleepMode=sleepMode
 old_manualfilter=manualfilter
 old_manualh2o2=manualh2o2
 old_max_vol=max_vol
@@ -1351,7 +1351,7 @@ while alive:
     #    bg.set_alpha(introfade2)
     #    introfade2+=10
     #    if introfade2>255: introfade2=255
-    #    screen.blit(bg,(0,-vOffset)) #yOffset
+    #    screen.blit(bg,(0,-26)) #yOffset
     #    #pygame.display.flip()
     #    pygame.display.update()
         
@@ -1475,7 +1475,7 @@ while alive:
                 audioscreen = True 
                 mlock=True
                 printer.fout('audioscreen',str(audioscreen)) 
-                if audiomode==1: get_usbmedia()
+                if audiomode==AUDIO_USB: get_usbmedia()
 
             if on_trends and go and settingsscreen and exScr: 
                 #updatelog()
@@ -2051,7 +2051,7 @@ while alive:
                     
         if not settingsscreen and exScr:
             tankname()
-            if not lightMode: stage.blit(lightoff,(69, 363-vOffset))
+            if not lightMode: stage.blit(lightoff,(69, 363-26))
             
             if floatscreen and exScr:
                 gradbar()
@@ -2059,10 +2059,10 @@ while alive:
                 if playfloat:
                     #debugstring='playfloat'
                     #progbar.set_alpha(.7)
-                    stage.blit(progbar,(gradBarLeft-gradBarWidth+prog,gradBarTop-vOffset))
+                    stage.blit(progbar,(gradBarLeft-gradBarWidth+prog,gradBarTop-26))
                     x=gradBarLeft+prog
-                    pygame.draw.line(stage,(255,255,255),(x-1,gradBarTop-vOffset),(x-1,gradBarTop+gradBarHeight-vOffset-1), 1)
-                    pygame.draw.line(stage,(  0,  0,  0),(x,  gradBarTop-vOffset),(x,  gradBarTop+gradBarHeight-vOffset-1), 1)
+                    pygame.draw.line(stage,(255,255,255),(x-1,gradBarTop-26),(x-1,gradBarTop+gradBarHeight-26-1), 1)
+                    pygame.draw.line(stage,(  0,  0,  0),(x,  gradBarTop-26),(x,  gradBarTop+gradBarHeight-26-1), 1)
 
         if audioscreen:
             #jkl;
@@ -2245,7 +2245,7 @@ while alive:
                 min_fade2,
                 str(math.floor(custom_duration)))
             #asdf
-            if colorthereapymode: stage.blit(check,(424, 381-vOffset))
+            if colorthereapymode: stage.blit(check,(424, 381-26))
             
         if changed>0: screen.blit(stage,(0,0))
         tfade=1
@@ -2440,30 +2440,30 @@ while alive:
         #pygame.display.flip()
 
         
-        if (time.time()>lastInit+60): init=True
+        if (time.time()>last_sendAll+60): sendAll=True
         old1=(old_phase!=phase or old_t_offset!=t_offset)
         old2=((old_max_vol!=max_vol and time.time()>lastsend+.2) or old_targ_temp!=targ_temp_i)
         old=(old1 or old2)
-        misc=(mouseL!=old_mouseL or remote)
+        misc=(mouseL!=old_mouseL)
         faded= (fade!=old_fade and (fade==0 or fade==1) and not go)
         
         if time.time()>lastLog+60*60: updatelog()
         #if time.time()>lastLog+15: updatelog()
         
-        if (go or old or misc or faded or init):
+        if (go or old or misc or faded or sendAll):
             lastsend=time.time()
             msg_obj={}
-            if init or        old_phase!=phase:        msg_obj["phase"]       = phase
-            if init or      old_max_vol!=max_vol:      msg_obj["max_vol"]     = max_vol
-            if init or     old_t_offset!=t_offset:     msg_obj["t_offset"]    = t_offset
-            if init or    old_targ_temp!=targ_temp_i:  msg_obj["targ_temp"]   = targ_temp_i
-            if init or   old_manualh2o2!=manualh2o2:   msg_obj["h2o2"]        = manualh2o2
-            if init or old_manualfilter!=manualfilter: msg_obj["filter"]      = manualfilter                
+            if sendAll or        old_phase!=phase:        msg_obj["phase"]       = phase
+            if sendAll or      old_max_vol!=max_vol:      msg_obj["max_vol"]     = max_vol
+            if sendAll or     old_t_offset!=t_offset:     msg_obj["t_offset"]    = t_offset
+            if sendAll or    old_targ_temp!=targ_temp_i:  msg_obj["targ_temp"]   = targ_temp_i
+            if sendAll or   old_manualh2o2!=manualh2o2:   msg_obj["h2o2"]        = manualh2o2
+            if sendAll or old_manualfilter!=manualfilter: msg_obj["filter"]      = manualfilter                
             
-            if init:
+            if sendAll:
                 msg_obj["reinit"]=True
-                lastInit=time.time()
-                init=False
+                last_sendAll=time.time()
+                sendAll=False
                 
             msg=json.dumps(msg_obj)                  
             if msg!="{}": client.send(msg)
@@ -2476,7 +2476,6 @@ while alive:
             #old_alertMode=alertMode
             #old_phase=phase
             old_fade=fade
-            #old_sleepMode=sleepMode
             old_manualfilter=manualfilter
             old_manualh2o2=manualh2o2
             old_max_vol=max_vol
