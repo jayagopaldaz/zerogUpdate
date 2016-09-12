@@ -205,9 +205,9 @@ except: pass
 audiomode          =   int(printer.fin('audiomode'))
 
 if not solution_runtime: solution_runtime=pump_runtime
-if not rt_filter_max:   rt_filter_max   =   200
-if not rt_uvbulb_max:   rt_uvbulb_max   = 13000
-if not rt_solution_max: rt_solution_max =  3000
+if not rt_filter_max:    rt_filter_max   =   200
+if not rt_uvbulb_max:    rt_uvbulb_max   = 13000
+if not rt_solution_max:  rt_solution_max =  3000
 
 if not rt_filter_thresh:   rt_filter_thresh   = .9
 if not rt_uvbulb_thresh:   rt_uvbulb_thresh   = .9
@@ -2014,6 +2014,19 @@ while alive:
                     if max_vol>1: max_vol=1
                     
                     
+        ##########################################################################################################################################
+        #                                                 I M P O R T A N T      N O T E                                                         #
+        ##########################################################################################################################################
+        #                                                                                                                                        #
+        #    FOR SOME REASON THIS IS THE BEGINNING OF ANOTHER GUI FLOWCHART, AND I CAN'T EVEN REMEMBER SPECIFICALLY WHY IT NEEDED TWO SECTIONS.  #
+        #    THIS ENTIRE GUI IS UNFORGIVEABLY HORRENDOUS. IT IS LIKE THIS BECAUSE I DIDN'T KNOW HOW TO MAKE A PYTHON OBJECT/CLASS AT THE TIME    #
+        #    AND I HAD TWO WEEKS TO WRITE THE GUI ALONG WITH A WAY TO REMOTE CONTROL IT AND UPDATE IT WHILE COMPLETING THE HARDWARE. NOW IS THE  #
+        #    OPPORTUNITY I'VE BEEN WAITING FOR TO REFACTOR EVERYTHONG. WITH OUR POWERS COMBINED... WOOBIE SNOOGLE BOOGIN!                        #
+        #                                                                                                                                        #
+        #    WE NEED TO REFACTOR ALL OF THIS INTO A CANOPY ATOM BASED SOLUTION WITH A GUI ENGINE THAT HANDLES ATOMS GENERALLY. IF WE DO IT NOW,  #
+        #    WE WILL BE ***INCREDIBLY*** GLAD WE DID FURTHER AROUND THE TIME THREAD.                                                             #
+        #                                                                                                                                        #
+        ##########################################################################################################################################
         screens_END=mainscreen+2*floatscreen+4*settingsscreen
         if screens_BEGIN!=screens_END and floatscreen or reloaded: drawgradbar()
         if reloaded: 
