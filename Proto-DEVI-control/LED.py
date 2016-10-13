@@ -16,6 +16,7 @@ import RPi.GPIO as GPIO
 from threading import Thread
 
 printer.hello(myname,version)
+print(myname+', '+version)
 
 b=10
 lum=0
@@ -153,7 +154,7 @@ def col(j):
 ######################
 thresh=.5
 thresh_hi=.25
-pwmCap=9         #9 to 100
+pwmCap=5         #9 to 100
 poly=6
 polyb=3
 plumx=0

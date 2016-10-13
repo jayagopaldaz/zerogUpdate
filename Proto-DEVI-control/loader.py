@@ -2,8 +2,9 @@
 
 mypi='control'
 myname="loader.py"
-version="v.a.1.00"
+version="v.a.2.00"
 abspath='/home/pi/Desktop/'
+TESTMODE=True
 
 #=============================================================================================================================================================#
 import time
@@ -23,8 +24,19 @@ def u():
     while True:
         call(['idle3','-r',abspath+'unabstractor.py'])
         time.sleep(5)
-        
-Thread(target = c).start()
-Thread(target = u).start()
-time.sleep(20)
-Thread(target = l).start()
+
+def t():    
+    while True:
+        call(['idle3','-r',abspath+'test.py'])
+        time.sleep(5)
+
+if TESTMODE:        
+    Thread(target = t).start()
+    time.sleep(5)
+    Thread(target = l).start()
+
+else:
+    Thread(target = c).start()
+    Thread(target = u).start()
+    time.sleep(20)
+    Thread(target = l).start()

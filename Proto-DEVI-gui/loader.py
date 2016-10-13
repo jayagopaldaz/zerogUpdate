@@ -16,7 +16,8 @@ def c():
         time.sleep(5)
 def z():    
     while True:
-        call(['python3',abspath+'zerog.py'])
+        #call(['python3',abspath+'zerog.py'])
+        call(['idle3','-r',abspath+'zerog.py'])
         time.sleep(5)
         
 Thread(target = c).start()

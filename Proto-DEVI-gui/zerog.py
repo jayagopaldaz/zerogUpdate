@@ -3,7 +3,7 @@
 
 mypi='gui'
 myname="zerog.py"
-version="v.a.1.42"
+version="v.a.1.45"
 abspath='/home/pi/Desktop/'
 
 #=============================================================================================================================================================#
@@ -17,9 +17,18 @@ abspath='/home/pi/Desktop/'
 #
 #=============================================================================================================================================================#
 
-
 ######### LIBRARIES #########
+
+#demomode#
+#"""
+abspath='c:/wamp/www/zerog/zerogUpdate/'
+import sys
+sys.path.insert(0, abspath)
 import printer
+printer.abspath=abspath
+abspath='c:/wamp/www/zerog/zerogUpdate/Proto-DEVI-gui/'
+#"""
+
 import os
 import math
 import time
@@ -27,31 +36,79 @@ import pygame
 import json
 from pygame.locals import *
 from threading import Thread
-import server_hmi as server               
-import client_hmi as client               
+#import printer                            #demomode#
+import server_hmi as server               #demomode#
+import client_hmi as client               #demomode#
+
+#demomode#
+#"""
+class printer:
+    def hello(a,b): print(str((a,b)))
+    def p(a): print(a)
+    def goodbye(a,b): print(str((a,b)))
+    
+    def foutThread(fn,dat):
+        f=open(abspath+'var/'+fn,'w')
+        f.write(dat)
+        f.close()
+    def fout(fn,dat): Thread(target = printer.foutThread, args=[fn,dat]).start()
+    
+    def fin(fn): 
+        f=open(abspath+'var/'+fn,'r')
+        dat=f.read()
+        f.close()
+        return dat
+
+    myID='tester'
+    
+"""
+class client:
+    send_buffer={}
+    def socket_send(a):
+        print(a)
+        
+    def send(a):
+        if a=="reboot": client.socket_send(a)
+        else: client.send_buffer={**client.send_buffer, **a}
+        
+    def init():
+        while True:
+            if client.send_buffer: 
+                client.socket_send(json.dumps(client.send_buffer))
+                client.send_buffer={}
+            time.sleep(.25)
+    
+class server:
+    data='{"fthermo":1}'
+    def init():
+        t=93
+        ti=0
+        while True:
+            if t<93.5: ti+=.005
+            if t>93.5: ti-=.005
+            t+=ti
+            server.data='{"fthermo":'+str(t)+'}'
+            time.sleep(1)
+            
+#"""    
+
 
 
 ######### INITIALIZE STUFF #########
 printer.hello(myname,version)
-
+#"""
 control_ip=False
-def socketboot():
-    global control_ip                     # Use zeroconf to discover the CONTROL-PI's IP
-    import mdns_hmi as mdns
-    my_ip       = (mdns.ip)
-    control_ip  = (mdns.info.properties[b'eth0']).decode('utf-8')
-    client.HOST = control_ip
-    print("control's ip: "+control_ip)
-    while not server.ready: continue
-    Thread(target=server.init).start()    # This will actually open the server stream
-    Thread(target=client.init).start()    # This will actually open the client stream
-#Thread(target=socketboot).start()         # Use this for async socketboot
-socketboot()
+control_ip  = "169.254.0.108"         #CONTROL-PI'S FIXED IP
+client.HOST = control_ip
+while not server.ready: continue
+Thread(target=server.init).start()    # This will actually open the server stream
+Thread(target=client.init).start()    # This will actually open the client stream
+#"""                                        #demomode#
 
 pygame.init()
 pygame.display.init()
 pygame.display.set_caption("Float Control "+version)
-pygame.mouse.set_visible(0)
+#pygame.mouse.set_visible(0)               #demomode#
 pygame.font.init()
 screen=pygame.display.set_mode((800, 480), NOFRAME|RLEACCEL)
 stage=pygame.Surface((800,480))
@@ -84,10 +141,10 @@ phase             = -3            # current float cycle phase
 stopcount         = False         # for anything that uses a countdown timer
 lightMode         = True          #
 alertMode         = False         #
-audiomode         = AUDIO_DEFAULT # 0=default, 1=usb, 2=aux
 AUDIO_DEFAULT     = 0             #
 AUDIO_USB         = 1             #
 AUDIO_AUX         = 2             #
+audiomode         = AUDIO_DEFAULT # 0=default, 1=usb, 2=aux
 colorthereapymode = False         #
 wlanSorted        = []            # wifi stuff
 ssidSelect        = False         # wifi stuff
@@ -308,6 +365,7 @@ screens_BEGIN=screens_END=0
 #================================ BUTTON RECTANGLES ================================                
 exit_button      = pygame.Rect(0, 0, 40, 40)
 
+tankname_button  = pygame.Rect(150, 50, 500, 60)
 sixtymin_button  = pygame.Rect(116, 204-26, 140,140)
 ninetymin_button = pygame.Rect(322, 204-26, 140,140)
 custommin_button = pygame.Rect(528, 204-26, 140,140)
@@ -379,11 +437,12 @@ introfade2=0
 
 wifilist=-5
 
+
 #================================ DEFINE SUBROUTINES ================================                
 #-----------------------------------------------------------------
 fpst=time.time()
 fps=0
-tname="ZEROGRAVITY"
+tname=printer.fin('tankname')
 def seth2o2():
     global min_h2o2
     if ORP_lev>=0:  min_h2o2=20 /60
@@ -401,12 +460,12 @@ def tankname():
     global tname,debugstring
 
     tn=tname
-    if printer.myID=='Harmony-DEVI': tn="HARMONY"
-    if printer.myID=='Portland-DEVI1': tn="FLOAT ON"
-    if printer.myID=='SantaCruz-DEVI1': tn="TANK ONE"
-    if printer.myID=='SantaCruz-DEVI2': tn="TANK TWO"
-    if printer.myID=='DeBoisPA-DEVI1': tn="ZEROGRAVITY"
-    tname=tn
+    #if printer.myID=='Harmony-DEVI': tn="HARMONY"
+    #if printer.myID=='Portland-DEVI1': tn="FLOAT ON"
+    #if printer.myID=='SantaCruz-DEVI1': tn="TANK ONE"
+    #if printer.myID=='SantaCruz-DEVI2': tn="TANK TWO"
+    #if printer.myID=='DeBoisPA-DEVI1': tn="ZEROGRAVITY"
+    #tname=tn
     numletters=len(tn)
     tnFull=tankname_font.render(tn,1,(28,103,114))
     charspacing=9
@@ -456,6 +515,8 @@ def tankname():
     
     timeelapsed.set_alpha(alpha0)
     temperature.set_alpha(alpha0)
+    
+    if tw<300: tw=300
     stage.blit(timeleft, (400-tw/2, 108))
     stage.blit(temperature, (400+tw/2-temperature.get_rect().width, 108))
     levels_button = pygame.Rect(400+tw/2-temperature.get_rect().width-10,108-10, temperature.get_rect().width+20,temperature.get_rect().height+20)
@@ -721,6 +782,7 @@ keyb_str=''
 keyb_i=0
 blink=time.time()
 blinktoggle=True
+keyrepeatdelay=-1
 def keyboard():
     global debugstring,blink,blinktoggle
     
@@ -780,7 +842,7 @@ def keyboard():
         if keyb_i>len(keyb_str):keyb_i=len(keyb_str)
         
     def addkey(l,x,y,w):
-        global debugstring,blink,blinktoggle
+        global debugstring,blink,blinktoggle,keyrepeatdelay
         #debugstring=l
         c=(128,203,224)
         if (l=='Shift' and keybshift) or (l=='Caps' and keybcaps): c=(255,255,255)
@@ -789,11 +851,12 @@ def keyboard():
         pygame.draw.rect(board, (90,90,90),keyrect, 1-(keybshift and l=='Shift')-(keybcaps and l=='Caps'))
         kl=status_font.render(l,1,c)
         board.blit(kl, (x+w/2-kl.get_rect().width/2, 10+y+25*(l=='Enter')))
-        if go and keyrectmouse.collidepoint(pos): 
+        if mouseL==1 and time.time()>keyrepeatdelay and keyrectmouse.collidepoint(pos): 
+            if keyrepeatdelay==-1: keyrepeatdelay=time.time()+1
             blink=time.time()
             blinktoggle=True
             insert(l)
-    
+        elif not mouseL: keyrepeatdelay=-1
     ky=0
     kxo=50
     
@@ -934,7 +997,7 @@ def audiowidgets():
             usb_index=-1
             usb_audiofile=''            
         if my>350 and my<450: audiomode=AUDIO_AUX
-        if not (usb_buffer and audiomode==AUDIO_USB): client.send(json.dumps({'audiomode':audiomode}))            
+        if not (usb_buffer and audiomode==AUDIO_USB): client.que({'audiomode':audiomode})
     
     if mx>170 and mx<170+w and my>108 and my<108+h and go:
         #jkl;
@@ -946,6 +1009,7 @@ def audiowidgets():
         except: print('send audio file exception')
     stage.blit(filelist,(170,108))    
 
+"""                         #demomode#
 import http.server
 import socketserver
 def httpserver():
@@ -954,6 +1018,7 @@ def httpserver():
     httpd.serve_forever()
 
 Thread(target = httpserver).start()
+#"""
 
 def sendfile(fl,fr): Thread(target = sendfileThread, args=[fl,fr]).start()
 def sendfileThread(fl,fr): 
@@ -961,7 +1026,7 @@ def sendfileThread(fl,fr):
     os.system("sudo mount /dev/sda1 /media/pi/USB")
     os.system('sudo cp "'+fl+'" temp')
     os.system("sudo udisks --unmount /dev/sda1")
-    client.send(json.dumps({"fileget":fr}))    
+    client.que({"fileget":fr})    
     
 usbmedia=[]
 usbfiles=[]
@@ -1032,6 +1097,7 @@ def alerts():
     if filter_runtime/3600   >=   rt_filter_max * rt_filter_thresh   : debugstring+=' [Filter Runtime Notice] '
     if uvbulb_runtime/3600   >=   rt_uvbulb_max * rt_uvbulb_thresh   : debugstring+=' [UV-Bulb Runtime Notice] '
     if solution_runtime/3600 >= rt_solution_max * rt_solution_thresh : debugstring+=' [Solution Runtime Notice] '
+    if cur_temp+t_offset<80 or cur_temp+t_offset>100:                  debugstring+=' [Temperature Notice] '
                 
 foutprep=0
 def runtimebars():
@@ -1175,10 +1241,12 @@ def drawgradbar():
     progbar.fill((22,27,33))
     progbar.set_alpha(math.floor(255*.7)) # 70% white prog bar... remember ;) ?
 
-    c_r=colvals['colval_r']
-    c_g=colvals['colval_g']
-    c_b=colvals['colval_b']
-
+    c_r=c_g=c_b=0
+    try:
+        c_r=colvals['colval_r']
+        c_g=colvals['colval_g']
+        c_b=colvals['colval_b']
+    except: pass
     def byteclamp(n):
         n=int(n)
         if n<0: n=0
@@ -1278,12 +1346,12 @@ def getserverupdates():
                     print('server-'+str(e))
                     break
                 
-                server.data='' #used it up ;)
+                #server.data='' #used it up ;)
                 jk=j.keys()
                 
                 if 'filegotten' in jk: 
                     usb_buffer=False
-                    client.send(json.dumps({'audiomode':audiomode}))
+                    client.que({'audiomode':audiomode})
                 if 'alertMode'  in jk: alertMode=j['alertMode']
                 if 'lightMode'  in jk: lightMode=bool(j['lightMode'])
                 if 'fthermo'    in jk: 
@@ -1324,6 +1392,7 @@ old_t_offset=t_offset
 #old_min_fade2=min_fade2
 #old_min_fade1_m=min_fade1_m
 #old_min_fade2_m=min_fade2_m
+change_tankname=False
 
 mouseL=old_mouseL=0
 fout_ct_time=time.time()
@@ -1367,11 +1436,13 @@ while alive:
             go=touched=mlock=False
             lastsend=time.time()-1
         if go: even=False
+        if change_tankname and not on_tankname: go=False
         changed=1
         
         #=== CHECK IF THE MOUSE IS OVER ANY TARGET ZONES ===
         #
         on_exit      =      exit_button.collidepoint(pos)
+        
         on_sixtymin  =  sixtymin_button.collidepoint(pos)
         on_ninetymin = ninetymin_button.collidepoint(pos)
         on_custommin = custommin_button.collidepoint(pos)
@@ -1385,6 +1456,7 @@ while alive:
         on_gear      =      gear_button.collidepoint(pos)
 
         on_therm     =     therm_button.collidepoint(pos)
+        on_tankname  =  tankname_button.collidepoint(pos) and not on_therm
         on_audio     =     audio_button.collidepoint(pos)
         on_levels    =    levels_button.collidepoint(pos)
         on_wifi      =      wifi_button.collidepoint(pos)
@@ -1503,6 +1575,7 @@ while alive:
                 except: print('exception @885')
                 printer.fout('levelsscreen',str(levelsscreen))
 
+                
             #============================================================================
             #                            MAINSCREEN ONLY
             #============================================================================
@@ -1535,7 +1608,7 @@ while alive:
                 #asdf
                 if on_ctherapy and go and not mlock: 
                     colorthereapymode=not colorthereapymode
-                    client.send(json.dumps({"colorthereapymode":colorthereapymode}))
+                    client.que({"colorthereapymode":colorthereapymode})
                     reloaded=True
     
                 if on_ccol and go and not mlock:
@@ -1555,7 +1628,7 @@ while alive:
                         "colval_w":w
                         }
                     colvals_=json.dumps(colvals)
-                    client.send(json.dumps({"colvals":colvals_}))
+                    client.que({"colvals":colvals_})
                     printer.fout('colvals',colvals_)
                     reloaded=True
 
@@ -1583,7 +1656,7 @@ while alive:
                     fout_customDuration=True
                     fout_customMFadein=False
                     reloaded=True
-                    client.send(json.dumps({"fade1_music":round(min_fade1_m,1)}))
+                    client.que({"fade1_music":round(min_fade1_m,2)})
                 elif on_cmusicin: stepperSpeed=0
 
                 #CUSTOM MUSIC FADEOUT--------------------------------
@@ -1606,7 +1679,7 @@ while alive:
                     fout_customDuration=True
                     fout_customMFadeout=False
                     reloaded=True
-                    client.send(json.dumps({"fade2_music":round(min_fade2_m,1)}))
+                    client.que({"fade2_music":round(min_fade2_m,2)})
                 elif on_cmusicout: stepperSpeed=0
 
                 #CUSTOM LIGHT FADEIN--------------------------------
@@ -1626,7 +1699,7 @@ while alive:
                     fout_customDuration=True
                     fout_customLFadein=False
                     reloaded=True
-                    client.send(json.dumps({"fade1_light":round(min_fade1,1)}))
+                    client.que({"fade1_light":round(min_fade1,2)})
                 elif on_clightin: stepperSpeed=0
 
                 #CUSTOM LIGHT FADEOUT--------------------------------
@@ -1646,7 +1719,7 @@ while alive:
                     fout_customDuration=True
                     fout_customLFadeout=False
                     reloaded=True
-                    client.send(json.dumps({"fade2_light":round(min_fade2,1)}))
+                    client.que({"fade2_light":round(min_fade2,2)})
                 elif on_clightout: stepperSpeed=0
 
 
@@ -1959,7 +2032,7 @@ while alive:
                             "fade2_music":round(def_p+(1-def_p)*min_fade2_m,1),
                             "colorthereapymode":colorthereapymode                            
                             }
-                        client.send(json.dumps(msg_obj))
+                        client.que(msg_obj)
 
                     if on_stop and go: countdownstart=time.time()                            
                     if on_stop and mouseL and playfloat:
@@ -2033,17 +2106,18 @@ while alive:
             floatpreset=-1
             reloaded=False
         
-        if on_sleep and go and not settingsscreen:
+        first_two_screens=(not settingsscreen and not levelsscreen and not customscreen)
+        if on_sleep and go and first_two_screens:
             lightMode=not lightMode
-            client.send(json.dumps({"lightMode":lightMode}))
+            client.que({"lightMode":lightMode})
             countdownstart=time.time()                
-        if on_sleep and mouseL and not settingsscreen and time.time()>countdownstart+1:
+        if on_sleep and mouseL and first_two_screens and time.time()>countdownstart+1:
             stopcount=True
             countdown_num=6-(time.time()-countdownstart)
             if countdown_num<-.9:
-                client.send("reboot")
-                os.system('reboot')
-        elif on_sleep and not mouseL:
+                client.que("reboot")
+                os.system('reboot')                
+        elif on_sleep and not mouseL and first_two_screens:
             stopcount=False
             countdown_num=3
             countdownstart=time.time()
@@ -2260,9 +2334,26 @@ while alive:
             #asdf
             if colorthereapymode: stage.blit(check,(424, 381-26))
             
+        if on_tankname and go and first_two_screens: 
+            change_tankname=not change_tankname
+            if change_tankname:
+                keybcaps=True
+                keyrepeatdelay=-1
+        if change_tankname:            
+            keyboard()
+            if keybEnter:
+                keybEnter=False
+                tname=keyb_str
+                printer.fout('tankname',tname)
+                change_tankname=False
+            
+        
         if changed>0: screen.blit(stage,(0,0))
+        
         tfade=1
         tlights=False
+        if min_fade1==0: min_fade1=.0001
+        if min_fade2==0: min_fade2=.0001
         
         old_phase=phase
         if floatInProgress:
@@ -2290,7 +2381,11 @@ while alive:
                 if tfade<0: tfade=0
             
             if floatelapsed/60>min_shower+min_fade1+min_float+min_fade2-min_fade2_m: 
-                if not fadeinmusic: client.send(json.dumps({"fadeinmusic":fadeinmusic}))
+                #if min_fade2==min_fade2_m:
+                #    if not fadeinmusic: client.que({"phase":3,"fadeinmusic":True})
+                #else:
+                #    if not fadeinmusic: client.que({"fadeinmusic":True})
+                if not fadeinmusic: client.que({"fadeinmusic":True})
                 fadeinmusic=True
                 
             if floatelapsed/60>min_shower+min_fade1+min_float+min_fade2: 
@@ -2364,14 +2459,14 @@ while alive:
                     
         #floatelapsed=(time.time()-floatstart)*1+60*min_shower-5
         #floatelapsed=(time.time()-floatstart)*1+60*(min_shower+1*min_fade1)-10
-        #floatelapsed=(time.time()-floatstart)*1+60*(min_shower+1*min_fade1+min_float)-10
+        floatelapsed=(time.time()-floatstart)*1+60*(min_shower+1*min_fade1+min_float)-10
         #floatelapsed=(time.time()-floatstart)*1+60*(min_shower+(min_fade1+min_fade2)+min_float)-10
         #floatelapsed=(time.time()-floatstart)*1+60*(min_shower+(min_fade1+min_fade2)+min_float+min_wait)-10
         #floatelapsed=(time.time()-floatstart)*1+60*(min_shower+(min_fade1+min_fade2)+min_float+min_wait+min_plo)-10
         #floatelapsed=(time.time()-floatstart)*1+60*(min_shower+(min_fade1+min_fade2)+min_float+min_wait+min_plo+min_phi)-10
     
         #================ ================ ================ ================ ================ 
-        floatelapsed=(time.time()-floatstart)   #this is the not-testing-for one
+        ########floatelapsed=(time.time()-floatstart)   #this is the not-testing-for one
         #debugstring=str(int(min_float+min_fade1+min_fade2))
         #================ ================ SPECIAL TEST MODES ================ ================ 
         #if int(min_float+min_fade1+min_fade2)==21: floatelapsed=(time.time()-floatstart)*60
@@ -2388,6 +2483,7 @@ while alive:
         #================ ACTUALLY DRAW TARGET ZONES FOR TESTING ======================
         #pygame.draw.rect(screen, (0, 0,100),exit_button, 2)    
 
+        #pygame.draw.rect(screen, (0, 0,100),tankname_button, 2)    
         #pygame.draw.rect(screen, (100,0,0),sixtymin_button, 2)
         #pygame.draw.rect(screen, (0,100,0),ninetymin_button, 2)
         #pygame.draw.rect(screen, (0,0,100),custommin_button, 2)
@@ -2478,8 +2574,9 @@ while alive:
                 last_sendAll=time.time()
                 sendAll=False
                 
-            msg=json.dumps(msg_obj)                  
-            if msg!="{}": client.send(msg)
+            #msg=json.dumps(msg_obj)                  
+            #if msg!="{}": client.que(msg)
+            client.que(msg_obj)
             if old_max_vol!=max_vol: printer.fout('max_vol',str(max_vol))
                 
             

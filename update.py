@@ -56,6 +56,7 @@ shared_urls = [
     'update.py'
     ]
 
+""" # to switch, #/_ 
 control_urls = [
     'control/client_control.py',
     'control/globalvars.py',
@@ -63,10 +64,26 @@ control_urls = [
     'control/loader.py',
     'control/mdns_control.py',
     'control/server_control.py',
+    'control/test.py',
     'control/unabstractor.py'
     ]
-
-music_urls = ['default.mp3']
+""" 
+control_urls = [
+    'client_control.py',
+    'globalvars.py',
+    'LED.py',
+    'loader.py',
+    'mdns_control.py',
+    'server_control.py',
+    'test.py',
+    'unabstractor.py'
+    ]
+#"""
+    
+music_urls = [
+    'default.mp3',
+    'test.mp3'
+    ]
 
 gui_urls = [
     'client_hmi.py',

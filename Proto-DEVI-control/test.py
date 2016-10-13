@@ -1,8 +1,9 @@
+﻿# -*- coding: utf-8 -*-
 #=============================================================================================================================================================#
 
 mypi='control'
 myname="test.py"
-version="v.a.1.20"
+version="v.a.2.04"
 abspath='/home/pi/Desktop/'
 
 #=============================================================================================================================================================#
@@ -12,32 +13,19 @@ import subprocess
 import os
 import vlc
 import RPi.GPIO as GPIO
-from subprocess import call
+import tkinter
+from functools import partial
+from tkinter import *
 from threading import Thread
 from Adafruit_MAX9744 import MAX9744
-#import server_control as server
-#import client_control as client
 
 print(myname+', '+version)
 
-"""def socketboot():
-    import mdns_control as mdns
-    hmi_ip=(mdns.info.properties[b'eth0']).decode('utf-8')
-    my_ip=mdns.ip
-    print("hmi ip: "+hmi_ip)
-    client.HOST=hmi_ip
-    while not server.ready: continue
-    Thread(target=server.init).start()
-    Thread(target=client.init).start()
-
-Thread(target=socketboot).start()
-#socketboot()
-"""
-
+alive=True
 OFF=1
 ON=0
-
 fthermo=0
+amperr=False
 
 #relay1
 p_heater1=31 #heater1
@@ -90,11 +78,12 @@ GPIO.setup(p_thermo, GPIO.IN)
 GPIO.setup(p_user, GPIO.IN)
 GPIO.setup(p_alert, GPIO.IN)
 
-
+#-----------------------------------------------
 def temperatureThread():
+    global fthermo
     thermo_sensor=-1
     st=time.time()
-    while time.time()<st+6:
+    while alive:
         if thermo_sensor!=-1:
             try:
                 f = open(thermo_sensor, 'r')
@@ -109,92 +98,140 @@ def temperatureThread():
                         thermo_c = float(thermo_string) / 1000.0
                         thermo_f = thermo_c * 9.0 / 5.0 + 32.0
                         fthermo=math.floor(thermo_f*10)/10
-                        print('thermo: '+ str(fthermo))
+                        #print('thermo: '+ str(fthermo))
                 
             except: 
                 print('thermo exception@171')
                 thermo_sensor=-1
         else:
-            fthermo=''
+            fthermo='Thermo Error'
             if thermo_sensor!=-1: client.send(json.dumps({'fthermo':fthermo}))
             os.system('modprobe w1-gpio')
             os.system('modprobe w1-therm')
             fns = [fn for fn in os.listdir("/sys/bus/w1/devices/")]
             for i in fns:
-                if i[:2]=="28": thermo_sensor = '/sys/bus/w1/devices/'+i+'/w1_slave'
+                if i[:2]=="28": 
+                    thermo_sensor = '/sys/bus/w1/devices/'+i+'/w1_slave'
+                    break
                 else: thermo_sensor = -1
                 
         time.sleep(1)
     
 #--------------------------------------------------------
-def actionThread():
-    def toggle(p):
-        print(str(p))
-        GPIO.output(p, ON)
-        time.sleep(2)
-        GPIO.output(p, OFF)
-    toggle(p_plo)
-    toggle(p_phi)
-    toggle(p_h2o2)
-    toggle(p_uv)
-    toggle(p_heater1)
-    toggle(p_heater2)
-    toggle(p_heater3)
-    toggle(p_heater4)
-
-    def getpinstates(p):
-        print('Performing state test on pin #'+str(p))
-        s=''
-        st=time.time()
-        while time.time()<st+.01: s+=str(GPIO.input(p))
-        s=s.replace('0000000000000000000000000000000000000000000000000000000000000000','0~')
-        s=s.replace('1111111111111111111111111111111111111111111111111111111111111111','1~')
-        print(s)
-    
-    lightToggle=GPIO.input(p_user)
-    alertToggle=GPIO.input(p_alert)
-
-    print('\n-----------------------')
-    getpinstates(p_user)
-    print('press the light toggle...')
-    while GPIO.input(p_user)==lightToggle: continue
-    getpinstates(p_user)
-
-    print('\n-----------------------')
-    getpinstates(p_alert)
-    print('press the alert toggle...')
-    while GPIO.input(p_alert)==alertToggle: continue
-    getpinstates(p_alert)    
-                
-
-#--------------------------------------------------------
-music=0
+music=volume=32
 def musicThread():
-    global music
-    amp = MAX9744() #amp = MAX9744(busnum=2, address=0x4C)
-    amp.set_volume(0)
+    global music,amperr
+    try:
+        amp = MAX9744()
+        amp.set_volume(volume)        
+        music=vlc.MediaPlayer("file://"+abspath+"test.mp3")
+        while alive:
+            music.play()
+            mstate=str(music.get_state())
+            if mstate=="State.Ended": music.set_media(music.get_media())
+            while alive and mstate == "State.Opening" or mstate == "State.Playing": 
+                mstate=str(music.get_state())
+                amp.set_volume(volume)
+        music.stop()
+        
+    except:
+        amperr=True
 
-    music=vlc.MediaPlayer("file://"+abspath+"default.mp3")
-    music.play()
-    mstate=str(music.get_state())
-    while mstate == "State.Opening": mstate=str(music.get_state())
-    for v in range(0,63):
-        amp.set_volume(v)
-        time.sleep(.1)
-    for v in range(62,0,-1):
-        amp.set_volume(v)
-        time.sleep(.1)
-
-    
+   
 #--------------------------------------------------------
-def setLED(l,v):
-    print('setLED === lum:'+str(l)+", vel:"+str(v))
-    printer.fout('targ_lum',str(l))
-    printer.fout('targ_lum_vel',str(v))
-    
+def windowThread():
+    global volume
+    win=tkinter.Tk()
+    win.title("ZeroG")
+    win.protocol("WM_DELETE_WINDOW", exit)
+    winW=798
+    winH=408
+    win.geometry("%dx%d+0+0" % (winW, winH))
 
-def stop():
-    #cleanup on exit
+    relayB=[0]*9
+    relayV=[0]*9
+    relayL=[0]*9
+    relay_=[0]*3
+    relays___=Frame(win)
+    relay_[1]=Frame(relays___)
+    relay_[2]=Frame(relays___)
+    relays___.pack(side=LEFT, fill=Y)
+    relay_[1].pack(side=TOP,    pady=10)
+    relay_[2].pack(side=BOTTOM, pady=10)
+    
+    
+    #RELAY BUTTONS
+    on_off=['Off','On']
+    parr=[0,  p_heater1,p_heater2,p_heater3,p_heater4,   p_plo,p_phi,p_h2o2,p_uv]
+    def relaycallback(in_): 
+        GPIO.output(parr[in_], (not GPIO.input(parr[in_])) )
+        relayV[in_].set(on_off[1-GPIO.input(parr[in_])])
+    for i in range(1,9): 
+        frame=Frame(relay_[1+(i>4)])
+        if i>4: frame.pack(side=BOTTOM)
+        else:   frame.pack(side=TOP)
+        
+        relayV[i]=StringVar()
+        relayB[i]=Button(frame, text="Relay "+str(1+(i>4))+" in"+str(i-4*(i>4)), pady=12, command=partial(relaycallback, i))
+        relayL[i]=Label (frame, textvariable=relayV[i])
+        
+        relayV[i].set("Off")
+        relayB[i].pack(side=LEFT,padx=20,pady=1)
+        relayL[i].pack(side=LEFT)
+    
+    #VOLUME
+    frame=Frame(win)
+    frame.pack(side=TOP, fill=X, padx=60,pady=40)
+    volumeV=IntVar()
+    volumeV.set(volume)
+    volumeL=Label(frame, text="Volume: ")
+    volumeS=Scale(frame, variable=volumeV, to=63, orient=HORIZONTAL, length=480, width=40)
+    volumeL.pack(side=LEFT,ipady=0)
+    volumeS.pack(side=LEFT,ipady=10)
+    
+    #TEMPERATURE
+    frame=Frame(win)
+    frame.pack(side=TOP, fill=X, padx=60,pady=40)
+    thermoV=StringVar()
+    thermoL=Label(frame, text="Temperature: ")
+    thermoS=Label(frame, textvariable=thermoV)
+    thermoL.pack(side=LEFT)
+    thermoS.pack(side=LEFT)
+    
+    #LIGHT PUSHBUTTON
+    frame_=Frame(win)
+    frame_.pack(side=TOP, fill=X, padx=60,pady=40)
+    frame=Frame(frame_)
+    frame.pack(side=TOP, fill=X)
+    lpushV=StringVar()
+    lpushL=Label(frame, text="Light Pushbutton: ")
+    lpushS=Label(frame, textvariable=lpushV)
+    lpushL.pack(side=LEFT)
+    lpushS.pack(side=LEFT)
+    
+    frame=Frame(frame_)
+    frame.pack(side=TOP, fill=X)
+    apushV=StringVar()
+    apushL=Label(frame, text="Alert Pushbutton: ")
+    apushS=Label(frame, textvariable=apushV)
+    apushL.pack(side=LEFT)
+    apushS.pack(side=LEFT)
+    
+    while alive:
+        win.update()
+        thermoV.set(str(fthermo)+"°F")
+        l_=a_=''
+        t=time.time()
+        mp=['-','+']
+        while time.time()<t+.0001: l_+=mp[GPIO.input(p_user)]
+        t=time.time()
+        while time.time()<t+.0001: a_+=mp[GPIO.input(p_alert)]
+        lpushV.set(l_)
+        apushV.set(a_)
+        volume=volumeV.get()
+        if amperr: volumeL['text']='Amp Error: '
+        
+    win.destroy()
     GPIO.output(p_plo, False)
     GPIO.output(p_phi, False)
     GPIO.output(p_h2o2, False)
@@ -204,80 +241,17 @@ def stop():
     GPIO.output(p_heater3, False)
     GPIO.output(p_heater4, False)
     GPIO.cleanup()
-    music.stop()
-
-#--------------------------------------------------------
-#                      SERVER STUFF
-#--------------------------------------------------------
-"""
-def getserverupdates():
-    global init
-    #global sleepMode,
-    global new_max_vol,lightMode
+    
+    
+    
+def exit():
     global alive
+    alive=False
 
-    try:
-        while alive:
-            if server.data!='':
-                if server.data=='reboot': os.system('reboot')
-                if "reinit" not in server.data: print('unabstractor === serverdata:'+str(server.data))
-                
-                try: j=json.loads(server.data)
-                except: print('json exception@getserverupdates')
-                
-                server.data='' #used it up ;)
-                jk=j.keys()
-                
-                if 'colvals' in jk: printer.fout('colvals',str(j['colvals']))
-                if 'phase' in jk:
-                    if glb.phase!=int(j['phase']):                    
-                        glb.phase=int(j['phase'])
-                        if glb.phase==glb.PHASE_NONE: setLED(100,quickLight)
-                        if glb.phase==glb.PHASE_FADE1: setLED(0,fade1Light)
-                        if glb.phase==glb.PHASE_FLOAT: setLED(0,quickLight)
-                        if glb.phase==glb.PHASE_FADE2: setLED(100,fade2Light)
-                        if glb.phase>glb.PHASE_FADE2: setLED(100,quickLight)        
-                if 'h2o2' in jk: glb.manualh2o2=bool(j['h2o2'])
-                if 'filter' in jk: glb.manualfilter=bool(j['filter'])
-                if 'targ_temp' in jk: glb.targ_temp=float(j['targ_temp'])
-                if 't_offset' in jk: glb.t_offset=float(j['t_offset'])                            
-                if 'fade1' in jk: fade1Light=fade1Music=60*float(j['fade1'])                                           
-                if 'fade2' in jk: fade2Light=fade1Music=60*float(j['fade2'])
-                if 'max_vol' in jk:
-                    glb.max_vol=float(j['max_vol'])
-                    printer.fout('max_vol',str(glb.max_vol))
-                    new_max_vol=True
-                if 'lightMode' in jk:                           
-                    #lightMode_=bool(j['lightMode'])
-                    #if lightMode!=lightMode_:
-                    #    lightMode=lightMode_
-                    #    if lightMode: setLED(100,quickLight)
-                    #    else: setLED(0,quickLight)
-                    #    #elif glb.phase!=glb.PHASE_FLOAT: setLED(100,quickLight)
-                    lightMode=bool(j['lightMode'])
-                    if lightMode: setLED(100,quickLight)
-                    else: setLED(0,quickLight)
-                    
-            time.sleep(.1)
-    except: print('serverupdate reboot')
-"""        
 #--------------------------------------------------------
-timeout=time.time()
-#Thread(target = getserverupdates).start()
-
-###################################
-print('=========================')
-print('-------TEMPERATURE-------')
-temperatureThread()
-###################################
-print('========================')
-print('-------GPIO TESTS-------')
-actionThread()
-###################################
-print('========================')
-print('-------MUSIC TEST-------')
-musicThread()
-###################################
-                  
-        
-#=============================================================================================================================================================#
+f=open(abspath+'var/targ_lum','w')
+f.write('alert')
+f.close()
+Thread(target = windowThread).start()
+Thread(target = temperatureThread).start()
+Thread(target = musicThread).start()

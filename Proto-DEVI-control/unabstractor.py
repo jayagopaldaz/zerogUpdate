@@ -3,7 +3,7 @@
 
 mypi='control'
 myname="unabstractor.py"
-version="v.a.1.42"
+version="v.a.1.46"
 abspath='/home/pi/Desktop/'
 
 #=============================================================================================================================================================#
@@ -23,23 +23,16 @@ import server_control as server
 import client_control as client
 import globalvars as glb
 
+######### INITIALIZE STUFF #########
 printer.hello(myname,version)
 print(myname+', '+version)
-
-hmi_ip=0
-def socketboot():
-    global hmi_ip
-    import mdns_control as mdns
-    hmi_ip=(mdns.info.properties[b'eth0']).decode('utf-8')
-    my_ip=mdns.ip
-    print("hmi ip: "+hmi_ip)
-    client.HOST=hmi_ip
-    while not server.ready: continue
-    Thread(target=server.init).start()
-    Thread(target=client.init).start()
-
-#Thread(target=socketboot).start()
-socketboot()
+#"""
+hmi_ip=False
+hmi_ip  = "169.254.0.109"             #HMI-PI'S FIXED IP
+client.HOST = hmi_ip
+while not server.ready: continue
+Thread(target=server.init).start()    # This will actually open the server stream
+Thread(target=client.init).start()    # This will actually open the client stream
 
 alive=True
 #sleepMode=False
@@ -56,6 +49,7 @@ vlc_i=0
 lastPrint=-30
 pdelay=12
 tick=0
+tock=0
 #--------------------------------------------------------
 volume=0
 volume_base=0
@@ -176,14 +170,14 @@ def temperatureThread():
                         thermo_c = float(thermo_string) / 1000.0
                         thermo_f = thermo_c * 9.0 / 5.0 + 32.0
                         fthermo=math.floor(thermo_f*10)/10
-                        client.send(json.dumps({'fthermo':fthermo}))
+                        client.que({'fthermo':fthermo})
                 
             except: 
                 print('thermo exception@171')
                 thermo_sensor=-1
         else:
             fthermo=''
-            if thermo_sensor!=-1: client.send(json.dumps({'fthermo':fthermo}))
+            if thermo_sensor!=-1: client.que({'fthermo':fthermo})
             os.system('modprobe w1-gpio')
             os.system('modprobe w1-therm')
             fns = [fn for fn in os.listdir("/sys/bus/w1/devices/")]
@@ -207,6 +201,7 @@ def actionThread():
     global lightMode,alertMode
     global lightToggle,alertToggle
     global alive
+    global tick,tock
     
     thermo="I can't feel the water"
     alert="No alert, probably"
@@ -221,8 +216,11 @@ def actionThread():
     lightOffTime=time.time()
     togs=0
     #printer.p(OOO+"actionThread === entering circuit...")    
+    pu=''
+    pa=''
     pu_=''
     pa_=''
+    heaterchange=time.time()
     while alive:
         filtermode=glb.manualfilter
         h2o2mode=glb.manualh2o2
@@ -283,41 +281,68 @@ def actionThread():
         topHeatOn=30
         topHeatOff=3*60
         
-        if calThermo<thermotarg and GPIO.input(p_heater1) and time.time()-h12cool>topHeatOff:
+        #if calThermo<thermotarg and GPIO.input(p_heater1) and time.time()-h12cool>topHeatOff:
+        if GPIO.input(p_heater1) and time.time()-h12cool>topHeatOff:
             GPIO.output(p_heater1,ON)
             GPIO.output(p_heater2,ON)
-            h12hot=time.time()
-        if (calThermo>thermotarg or time.time()-h12hot>topHeatOn) and not GPIO.input(p_heater1):
+            h12hot=time.time()            
+        if not GPIO.input(p_heater1) and time.time()-h12hot>topHeatOn:
             GPIO.output(p_heater1,OFF)
             GPIO.output(p_heater2,OFF)
             h12cool=time.time()
 
-        if calThermo<thermotarg and GPIO.input(p_heater3):
+        if calThermo<thermotarg-0  and GPIO.input(p_heater3)==OFF:
             GPIO.output(p_heater3,ON)
             GPIO.output(p_heater4,ON)
-        if calThermo>thermotarg+.5 and not GPIO.input(p_heater3):
+            heaterchange=time.time()
+        if calThermo>thermotarg+.5 and GPIO.input(p_heater3)==ON:
             GPIO.output(p_heater3,OFF)
             GPIO.output(p_heater4,OFF)
+            heaterchange=time.time()
             
-        #pu_+=str(GPIO.input(p_user))
-        #pa_+=str(GPIO.input(p_alert))
-        #if time.time()-tick>1:
-        #    print('p_user :'+pu_)
-        #    print('p_alert:'+pa_)
-        #    pu_=''
-        #    pa_=''
-        #    tick=time.time()
+        """
+        tick=time.time()
+        pu_=''
+        pa_=''
+        while time.time()-tick<.001 and not filtermode:
+            pu_+=str(GPIO.input(p_user))
+            pa_+=str(GPIO.input(p_alert))
+        
+        if pu_.find('0')!=-1 and pu_.find('1')>0: pu+='X'
+        elif pu_.find('0')!=-1: pu+='0'
+        elif pu_.find('1')!=-1: pu+='1'
+        
+        if pa_.find('0')!=-1 and pa_.find('1')>0: pa+='X'
+        elif pa_.find('0')!=-1: pa+='0'
+        elif pa_.find('1')!=-1: pa+='1'
+        
+        if time.time()-tock>3:
+            msg=(str(math.floor(time.time()))+'> ')
+            if pu.find('X')!=-1: msg+=('p_user : MISMATCH | ')
+            elif pu.find('0')!=-1: msg+=('p_user : 0 | ')
+            elif pu.find('1')!=-1: msg+=('p_user : 1 | ')
             
-        if GPIO.input(p_user)!=lightToggle: 
+            if pa.find('X')!=-1: msg+=('p_alert: MISMATCH')
+            elif pa.find('0')!=-1: msg+=('p_alert: 0')
+            elif pa.find('1')!=-1: msg+=('p_alert: 1')
+            
+            print(msg)
+            tock=time.time()
+            pu=''
+            pa=''
+        """
+        
+        inductance_safeguard=(filtermode or glb.phase>=glb.PHASE_PLO or time.time()<heaterchange+1)
+        if GPIO.input(p_user)!=lightToggle and not inductance_safeguard:
             lightToggle=not lightToggle
             lightMode=not lightMode
-            client.send(json.dumps({'lightMode':lightMode}))
+            client.que({'lightMode':lightMode})
             setLED(100*(lightMode),quickLight)
             
-        if GPIO.input(p_alert)!=alertToggle:
+        if GPIO.input(p_alert)!=alertToggle and not inductance_safeguard:
             alertToggle=not alertToggle
             alertMode=not alertMode
-            client.send(json.dumps({'alertMode':alertMode}))
+            client.que({'alertMode':alertMode})
             if alertMode: setLED('alert',quickLight)
             else:         setLED('safe',2*quickLight)
             
@@ -515,7 +540,7 @@ def getserverupdates():
                     if 'fileget' in jk: 
                         os.system('wget -O '+j['fileget']+' http://'+hmi_ip+':8000/temp')
                         music.set_media(vlc_i.media_new(abspath+'usb.mp3'))
-                        client.send(json.dumps({'filegotten':True}))
+                        client.que({'filegotten':True})
                     if 'audiomode' in jk:
                         if j['audiomode']==0: 
                             auxaudio=False
