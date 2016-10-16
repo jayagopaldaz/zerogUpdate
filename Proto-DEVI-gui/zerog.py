@@ -3,8 +3,10 @@
 
 mypi='gui'
 myname="zerog.py"
-version="v.a.1.45"
+version="v.a.1.50"
 abspath='/home/pi/Desktop/'
+demomode=True
+spoofsocket=True
 
 #=============================================================================================================================================================#
 #
@@ -19,15 +21,13 @@ abspath='/home/pi/Desktop/'
 
 ######### LIBRARIES #########
 
-#demomode#
-#"""
-abspath='c:/wamp/www/zerog/zerogUpdate/'
-import sys
-sys.path.insert(0, abspath)
-import printer
-printer.abspath=abspath
-abspath='c:/wamp/www/zerog/zerogUpdate/Proto-DEVI-gui/'
-#"""
+if demomode:
+    abspath='c:/wamp/www/zerog/zerogUpdate/'
+    import sys
+    sys.path.insert(0, abspath)
+    import printer
+    printer.abspath=abspath
+    abspath='c:/wamp/www/zerog/zerogUpdate/Proto-DEVI-gui/'
 
 import os
 import math
@@ -36,79 +36,74 @@ import pygame
 import json
 from pygame.locals import *
 from threading import Thread
-#import printer                            #demomode#
-import server_hmi as server               #demomode#
-import client_hmi as client               #demomode#
+if not demomode:
+    import printer
+    import server_hmi as server
+    import client_hmi as client
 
-#demomode#
-#"""
-class printer:
-    def hello(a,b): print(str((a,b)))
-    def p(a): print(a)
-    def goodbye(a,b): print(str((a,b)))
-    
-    def foutThread(fn,dat):
-        f=open(abspath+'var/'+fn,'w')
-        f.write(dat)
-        f.close()
-    def fout(fn,dat): Thread(target = printer.foutThread, args=[fn,dat]).start()
-    
-    def fin(fn): 
-        f=open(abspath+'var/'+fn,'r')
-        dat=f.read()
-        f.close()
-        return dat
-
-    myID='tester'
-    
-"""
-class client:
-    send_buffer={}
-    def socket_send(a):
-        print(a)
+if demomode:
+    class printer:
+        myID='tester'
+        def hello(a,b): print(str((a,b)))
+        def p(a): print(a)
+        def goodbye(a,b): print(str((a,b)))
         
-    def send(a):
-        if a=="reboot": client.socket_send(a)
-        else: client.send_buffer={**client.send_buffer, **a}
+        def foutThread(fn,dat):
+            f=open(abspath+'var/'+fn,'w')
+            f.write(dat)
+            f.close()
+        def fout(fn,dat): Thread(target = printer.foutThread, args=[fn,dat]).start()
         
-    def init():
-        while True:
-            if client.send_buffer: 
-                client.socket_send(json.dumps(client.send_buffer))
-                client.send_buffer={}
-            time.sleep(.25)
+        def fin(fn): 
+            f=open(abspath+'var/'+fn,'r')
+            dat=f.read()
+            f.close()
+            return dat
     
-class server:
-    data='{"fthermo":1}'
-    def init():
-        t=93
-        ti=0
-        while True:
-            if t<93.5: ti+=.005
-            if t>93.5: ti-=.005
-            t+=ti
-            server.data='{"fthermo":'+str(t)+'}'
-            time.sleep(1)
+    if spoofsocket:
+        class client:
+            send_buffer={}
+            def print_que(a):
+                print(a)
+                
+            def que(a):
+                if a=="reboot": client.print_que(a)
+                else: client.send_buffer={**client.send_buffer, **a}
+                
+            def init():
+                while True:
+                    if client.send_buffer: 
+                        client.print_que(json.dumps(client.send_buffer))
+                        client.send_buffer={}
+                    time.sleep(.25)
             
-#"""    
-
-
+        class server:
+            ready=True
+            data='{"fthermo":1}'
+            def init():
+                t=93
+                ti=0
+                while True:
+                    if t<93.5: ti+=.005
+                    if t>93.5: ti-=.005
+                    t+=ti
+                    server.data='{"fthermo":'+str(t)+'}'
+                    time.sleep(1)
+                
 
 ######### INITIALIZE STUFF #########
 printer.hello(myname,version)
-#"""
 control_ip=False
 control_ip  = "169.254.0.108"         #CONTROL-PI'S FIXED IP
 client.HOST = control_ip
 while not server.ready: continue
 Thread(target=server.init).start()    # This will actually open the server stream
 Thread(target=client.init).start()    # This will actually open the client stream
-#"""                                        #demomode#
 
 pygame.init()
 pygame.display.init()
 pygame.display.set_caption("Float Control "+version)
-#pygame.mouse.set_visible(0)               #demomode#
+if not demomode: pygame.mouse.set_visible(0)
 pygame.font.init()
 screen=pygame.display.set_mode((800, 480), NOFRAME|RLEACCEL)
 stage=pygame.Surface((800,480))
@@ -194,7 +189,7 @@ min_fade2 =1
 min_wait  =3
 min_plo   =3
 min_phi   =20
-min_uv    =20
+#min_uv    =20
 min_h2o2  =1/60*10
 
 min_fade1_m =1
@@ -443,6 +438,7 @@ wifilist=-5
 fpst=time.time()
 fps=0
 tname=printer.fin('tankname')
+if not tname: tname="ZEROGRAVITY"
 def seth2o2():
     global min_h2o2
     if ORP_lev>=0:  min_h2o2=20 /60
@@ -460,12 +456,6 @@ def tankname():
     global tname,debugstring
 
     tn=tname
-    #if printer.myID=='Harmony-DEVI': tn="HARMONY"
-    #if printer.myID=='Portland-DEVI1': tn="FLOAT ON"
-    #if printer.myID=='SantaCruz-DEVI1': tn="TANK ONE"
-    #if printer.myID=='SantaCruz-DEVI2': tn="TANK TWO"
-    #if printer.myID=='DeBoisPA-DEVI1': tn="ZEROGRAVITY"
-    #tname=tn
     numletters=len(tn)
     tnFull=tankname_font.render(tn,1,(28,103,114))
     charspacing=9
@@ -1009,16 +999,15 @@ def audiowidgets():
         except: print('send audio file exception')
     stage.blit(filelist,(170,108))    
 
-"""                         #demomode#
-import http.server
-import socketserver
-def httpserver():
-    Handler = http.server.SimpleHTTPRequestHandler
-    httpd = socketserver.TCPServer(("", 8000), Handler)
-    httpd.serve_forever()
+if not demomode:
+    import http.server
+    import socketserver
+    def httpserver():
+        Handler = http.server.SimpleHTTPRequestHandler
+        httpd = socketserver.TCPServer(("", 8000), Handler)
+        httpd.serve_forever()
 
-Thread(target = httpserver).start()
-#"""
+    Thread(target = httpserver).start()
 
 def sendfile(fl,fr): Thread(target = sendfileThread, args=[fl,fr]).start()
 def sendfileThread(fl,fr): 
@@ -1328,6 +1317,7 @@ def dephaser():
     if ph==6: return "PHASE_PHI"
     if ph==70: return "PHASE_UV"
     if ph==76: return "PHASE_UV+PHI"
+    if ph==75: return "PHASE_UV+PLO"
     if ph==800: return "PHASE_H2O2"
     if ph==806: return "PHASE_H2O2+PHI"
     if ph==870: return "PHASE_H2O2+UV"
@@ -2393,12 +2383,11 @@ while alive:
                 status_str="SHOWER"
                 
             if floatelapsed/60>min_shower+min_fade1+min_float+min_fade2+min_wait: 
-                phase=PHASE_PLO
-                status_str="FILTER"
+                phase=PHASE_PLO+PHASE_UV
+                status_str="FILTER"                
             
             if floatelapsed/60>min_shower+min_fade1+min_float+min_fade2+min_wait+min_plo: 
-                phase=PHASE_PHI
-                if floatelapsed/60<min_shower+(min_fade1+min_fade2)+min_float+min_wait+min_plo+min_uv: phase+=PHASE_UV
+                phase=PHASE_PHI+PHASE_UV
                 if floatelapsed/60<min_shower+(min_fade1+min_fade2)+min_float+min_wait+min_plo+min_h2o2: phase+=PHASE_H2O2
             
             if tfade>0:

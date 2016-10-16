@@ -18,8 +18,14 @@ send_buffer={}
 def que(d):
     global send_buffer
     if d=="reboot": send(d)
-    else: send_buffer={**send_buffer, **d}
-    
+    else: send_buffer=merge_dict(send_buffer, d)
+    #else: send_buffer={**send_buffer, **d}
+
+def merge_dict(x, y):
+    z = x.copy()
+    z.update(y)
+    return z
+
 def init():
     global send_buffer
     connected=False
