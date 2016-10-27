@@ -4,7 +4,7 @@ mypi='control'
 myname="loader.py"
 version="v.a.2.00"
 abspath='/home/pi/Desktop/'
-TESTMODE=True
+TESTMODE=not True
 
 #=============================================================================================================================================================#
 import time

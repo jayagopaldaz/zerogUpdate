@@ -3,7 +3,7 @@
 
 mypi='control'
 myname="test.py"
-version="v.a.2.04"
+version="v.a.3.00"
 abspath='/home/pi/Desktop/'
 
 #=============================================================================================================================================================#
@@ -14,6 +14,7 @@ import os
 import vlc
 import RPi.GPIO as GPIO
 import tkinter
+import i2crelay as relay
 from functools import partial
 from tkinter import *
 from threading import Thread
@@ -99,8 +100,8 @@ def temperatureThread():
                         thermo_f = thermo_c * 9.0 / 5.0 + 32.0
                         fthermo=math.floor(thermo_f*10)/10
                         #print('thermo: '+ str(fthermo))
-                
-            except: 
+
+            except:
                 print('thermo exception@171')
                 thermo_sensor=-1
         else:
@@ -110,34 +111,34 @@ def temperatureThread():
             os.system('modprobe w1-therm')
             fns = [fn for fn in os.listdir("/sys/bus/w1/devices/")]
             for i in fns:
-                if i[:2]=="28": 
+                if i[:2]=="28":
                     thermo_sensor = '/sys/bus/w1/devices/'+i+'/w1_slave'
                     break
                 else: thermo_sensor = -1
-                
+
         time.sleep(1)
-    
+
 #--------------------------------------------------------
 music=volume=32
 def musicThread():
     global music,amperr
     try:
         amp = MAX9744()
-        amp.set_volume(volume)        
+        amp.set_volume(volume)
         music=vlc.MediaPlayer("file://"+abspath+"test.mp3")
         while alive:
             music.play()
             mstate=str(music.get_state())
             if mstate=="State.Ended": music.set_media(music.get_media())
-            while alive and mstate == "State.Opening" or mstate == "State.Playing": 
+            while alive and mstate == "State.Opening" or mstate == "State.Playing":
                 mstate=str(music.get_state())
                 amp.set_volume(volume)
         music.stop()
-        
+
     except:
         amperr=True
 
-   
+
 #--------------------------------------------------------
 def windowThread():
     global volume
@@ -158,27 +159,29 @@ def windowThread():
     relays___.pack(side=LEFT, fill=Y)
     relay_[1].pack(side=TOP,    pady=10)
     relay_[2].pack(side=BOTTOM, pady=10)
-    
-    
+
+
     #RELAY BUTTONS
     on_off=['Off','On']
     parr=[0,  p_heater1,p_heater2,p_heater3,p_heater4,   p_plo,p_phi,p_h2o2,p_uv]
-    def relaycallback(in_): 
+    def relaycallback(in_):
         GPIO.output(parr[in_], (not GPIO.input(parr[in_])) )
+        print(str(in_))
+        relay.relay(in_-1, (not relay.relays[in_-1]) )
         relayV[in_].set(on_off[1-GPIO.input(parr[in_])])
-    for i in range(1,9): 
+    for i in range(1,9):
         frame=Frame(relay_[1+(i>4)])
         if i>4: frame.pack(side=BOTTOM)
         else:   frame.pack(side=TOP)
-        
+
         relayV[i]=StringVar()
         relayB[i]=Button(frame, text="Relay "+str(1+(i>4))+" in"+str(i-4*(i>4)), pady=12, command=partial(relaycallback, i))
         relayL[i]=Label (frame, textvariable=relayV[i])
-        
+
         relayV[i].set("Off")
         relayB[i].pack(side=LEFT,padx=20,pady=1)
         relayL[i].pack(side=LEFT)
-    
+
     #VOLUME
     frame=Frame(win)
     frame.pack(side=TOP, fill=X, padx=60,pady=40)
@@ -188,7 +191,7 @@ def windowThread():
     volumeS=Scale(frame, variable=volumeV, to=63, orient=HORIZONTAL, length=480, width=40)
     volumeL.pack(side=LEFT,ipady=0)
     volumeS.pack(side=LEFT,ipady=10)
-    
+
     #TEMPERATURE
     frame=Frame(win)
     frame.pack(side=TOP, fill=X, padx=60,pady=40)
@@ -197,7 +200,7 @@ def windowThread():
     thermoS=Label(frame, textvariable=thermoV)
     thermoL.pack(side=LEFT)
     thermoS.pack(side=LEFT)
-    
+
     #LIGHT PUSHBUTTON
     frame_=Frame(win)
     frame_.pack(side=TOP, fill=X, padx=60,pady=40)
@@ -208,7 +211,7 @@ def windowThread():
     lpushS=Label(frame, textvariable=lpushV)
     lpushL.pack(side=LEFT)
     lpushS.pack(side=LEFT)
-    
+
     frame=Frame(frame_)
     frame.pack(side=TOP, fill=X)
     apushV=StringVar()
@@ -216,7 +219,7 @@ def windowThread():
     apushS=Label(frame, textvariable=apushV)
     apushL.pack(side=LEFT)
     apushS.pack(side=LEFT)
-    
+
     while alive:
         win.update()
         thermoV.set(str(fthermo)+"°F")
@@ -230,7 +233,7 @@ def windowThread():
         apushV.set(a_)
         volume=volumeV.get()
         if amperr: volumeL['text']='Amp Error: '
-        
+
     win.destroy()
     GPIO.output(p_plo, False)
     GPIO.output(p_phi, False)
@@ -241,9 +244,9 @@ def windowThread():
     GPIO.output(p_heater3, False)
     GPIO.output(p_heater4, False)
     GPIO.cleanup()
-    
-    
-    
+
+
+
 def exit():
     global alive
     alive=False

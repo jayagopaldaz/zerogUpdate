@@ -2,7 +2,7 @@
 
 mypi='shared'
 myname="update.py',"
-version="v.a.1.20"
+version="v.a.3.00"
 abspath='/home/pi/Desktop/'
 
 #=============================================================================================================================================================#
@@ -60,6 +60,7 @@ shared_urls = [
 control_urls = [
     'control/client_control.py',
     'control/globalvars.py',
+    'control/i2crelay.py',
     'control/LED.py',
     'control/loader.py',
     'control/mdns_control.py',
@@ -71,6 +72,7 @@ control_urls = [
 control_urls = [
     'client_control.py',
     'globalvars.py',
+    'i2crelay.py',
     'LED.py',
     'loader.py',
     'mdns_control.py',
@@ -119,6 +121,8 @@ guiassets_settings_urls = [
     'guiassets/settings/filter.png',
     'guiassets/settings/h2o2.png',
     'guiassets/settings/levels.png',
+    'guiassets/settings/node.png',
+    'guiassets/settings/nodeon.png',
     'guiassets/settings/rt_edit.png',
     'guiassets/settings/runtime.png',
     'guiassets/settings/settings.png',

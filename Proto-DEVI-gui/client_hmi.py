@@ -2,13 +2,14 @@
 
 mypi='gui'
 myname="client_hmi.py"
-version="v.a.2.00"
+version="v.a.3.00"
 abspath='/home/pi/Desktop/'
 
 #=============================================================================================================================================================#
 import socket
 import time
 import json
+import os
 
 HOST = ''
 PORT = 9877
@@ -17,9 +18,8 @@ BUFSIZE = 4096
 send_buffer={}
 def que(d):
     global send_buffer
-    if d=="reboot": send(d)
-    else: send_buffer=merge_dict(send_buffer, d)
-    #else: send_buffer={**send_buffer, **d}
+    #send_buffer={**send_buffer, **d}
+    send_buffer=merge_dict(send_buffer, d)
 
 def merge_dict(x, y):
     z = x.copy()
@@ -42,6 +42,7 @@ def init():
             if send_buffer and time.time()>lastSend+.5:
                 b=bytes(json.dumps(send_buffer),'utf-8')
                 client.send(b)
+                if "reboot" in send_buffer.keys(): os.system('reboot')                
                 print('client sending: '+str(b))
                 send_buffer={}
                 lastSend=time.time()            

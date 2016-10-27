@@ -2,7 +2,7 @@
 
 mypi='control'
 myname="client_control.py"
-version="v.a.2.00"
+version="v.a.3.00"
 abspath='/home/pi/Desktop/'
 
 #=============================================================================================================================================================#
@@ -16,8 +16,7 @@ BUFSIZE = 4096
 
 send_buffer={}
 def que(d):
-    global send_buffer
-    
+    global send_buffer    
     #send_buffer={**send_buffer, **d}
     send_buffer=merge_dict(send_buffer, d)
 
@@ -41,8 +40,9 @@ def init():
         while connected:
             if send_buffer and time.time()>lastSend+.5:
                 b=bytes(json.dumps(send_buffer),'utf-8')
-                client.send(b)
-                print('client sending: '+str(b))
+                try: client.send(b)
+                except: connected=False
+                if "fthermo" not in send_buffer.keys(): print('client sending: '+str(b))
                 send_buffer={}
                 lastSend=time.time()            
             

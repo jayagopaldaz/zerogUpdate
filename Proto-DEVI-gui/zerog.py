@@ -3,10 +3,10 @@
 
 mypi='gui'
 myname="zerog.py"
-version="v.a.1.50"
+version="v.a.3.00"
 abspath='/home/pi/Desktop/'
-demomode=True
-spoofsocket=True
+demomode=False
+spoofsocket=False
 
 #=============================================================================================================================================================#
 #
@@ -34,6 +34,7 @@ import math
 import time
 import pygame
 import json
+import netifaces as ni
 from pygame.locals import *
 from threading import Thread
 if not demomode:
@@ -42,6 +43,8 @@ if not demomode:
     import client_hmi as client
 
 if demomode:
+    wlan0_ip=ni.ifaddresses(ni.interfaces()[1])[2][0]['addr']
+
     class printer:
         myID='tester'
         def hello(a,b): print(str((a,b)))
@@ -55,21 +58,34 @@ if demomode:
         def fout(fn,dat): Thread(target = printer.foutThread, args=[fn,dat]).start()
         
         def fin(fn): 
-            f=open(abspath+'var/'+fn,'r')
-            dat=f.read()
-            f.close()
-            return dat
+            try:
+                f=open(abspath+'var/'+fn,'r')
+                dat=f.read()
+                f.close()
+                return dat
+            except:
+                f=open(abspath+'var/'+fn,'w')
+                f.write('0')
+                f.close()
+                return '0'
     
     if spoofsocket:
         class client:
             send_buffer={}
             def print_que(a):
                 print(a)
+
+            def merge_dict(x, y):
+                z = x.copy()
+                z.update(y)
+                return z
                 
             def que(a):
                 if a=="reboot": client.print_que(a)
-                else: client.send_buffer={**client.send_buffer, **a}
-                
+                else: client.send_buffer=client.merge_dict(client.send_buffer, a)
+                #else: client.send_buffer={**client.send_buffer, **a}
+                #else: send_buffer={**send_buffer, **a}
+            
             def init():
                 while True:
                     if client.send_buffer: 
@@ -89,7 +105,16 @@ if demomode:
                     t+=ti
                     server.data='{"fthermo":'+str(t)+'}'
                     time.sleep(1)
-                
+else:
+    wlan0_ip=".---"
+    def get_my_ip():
+        global wlan0_ip
+        while wlan0_ip==".---":
+            try: wlan0_ip=ni.ifaddresses('wlan0')[2][0]['addr']
+            except: wlan0_ip=".---"
+    Thread(target=get_my_ip).start()
+        
+
 
 ######### INITIALIZE STUFF #########
 printer.hello(myname,version)
@@ -120,6 +145,8 @@ pH_lev            = 7.2           #
 ORP_lev           = 200           #
 specgrav_lev      = 1.25          #
 lbssalt_lev       = 0             #
+topon_lev         = 15            #
+topoff_lev        = 60*3          #
 max_vol           = .65           #
 sendAll           = True          #
 even              = False         # we usually update the frame every other loop cycle
@@ -140,7 +167,8 @@ AUDIO_DEFAULT     = 0             #
 AUDIO_USB         = 1             #
 AUDIO_AUX         = 2             #
 audiomode         = AUDIO_DEFAULT # 0=default, 1=usb, 2=aux
-colorthereapymode = False         #
+acoustictherapymode=False         #
+colortherapymode  = False         #
 wlanSorted        = []            # wifi stuff
 ssidSelect        = False         # wifi stuff
 ssid_refresh      = 0             # wifi stuff
@@ -164,11 +192,12 @@ PHASE_SHUTOFF= -2
 
 floatstart=time.time()
 floatInProgress=False
-fout_customMFadein=False
-fout_customMFadeout=False
-fout_customLFadein=False
-fout_customLFadeout=False
-fout_customDuration=False
+fout_customvar=False
+#fout_customMFadein=False
+#fout_customMFadeout=False
+#fout_customLFadein=False
+#fout_customLFadeout=False
+#fout_customDuration=False
 
 fout_currentTemperature=False
 fout_targetTemperature=False
@@ -178,6 +207,8 @@ fout_pH=False
 fout_ORP=False
 fout_specgrav=False
 fout_lbs=False
+fout_ton=False
+fout_toff=False
 custom_duration=120
 max_vol=.65
 overrideWarning=False
@@ -192,9 +223,12 @@ min_phi   =20
 #min_uv    =20
 min_h2o2  =1/60*10
 
+min_fade1_d =1
+fadeoutmusic=False
 min_fade1_m =1
 min_fade2_m =1
 fadeinmusic=False
+min_fade2_d =1
 
 totalDuration=-1
 countdown_num=3
@@ -231,15 +265,19 @@ uvbulb_runtime    = 0
 
 min_fade1          = float(printer.fin('min_fade1'))
 min_fade2          = float(printer.fin('min_fade2'))
+min_fade1_d        = float(printer.fin('min_fade1_d'))
 min_fade1_m        = float(printer.fin('min_fade1_m'))
 min_fade2_m        = float(printer.fin('min_fade2_m'))
+min_fade2_d        = float(printer.fin('min_fade2_d'))
 floatstart         = float(printer.fin('floatstart'))
 custom_duration    = float(printer.fin('custom_duration'))
 targ_temp          = float(printer.fin('targ_temp'))
 pH_lev             = float(printer.fin('pH_lev'))   
 ORP_lev            = float(printer.fin('ORP_lev'))  
 specgrav_lev       = float(printer.fin('specgrav_lev'))  
-lbssalt_lev        = float(printer.fin('lbssalt_lev'))  
+lbssalt_lev        = float(printer.fin('lbssalt_lev'))
+topon_lev          = float(printer.fin('topon_lev'))
+topoff_lev         = float(printer.fin('topoff_lev'))
 t_offset           = float(printer.fin('t_offset'))  
 pump_runtime       = float(printer.fin('pump_runtime'))
 filter_runtime     = float(printer.fin('filter_runtime'))
@@ -286,7 +324,6 @@ if printer.fin('manualfilter')   =="True": manualfilter   = True
 if printer.fin('manualh2o2')     =="True": manualh2o2     = True
 reloaded=True
 
-#if floatpreset==60 or floatpreset==90: min_fade1=min_fade2=min_fade1_m=min_fade2_m=1
 if floatpreset==60: min_float=60-(min_fade1+min_fade2)
 if floatpreset==90: min_float=90-(min_fade1+min_fade2)
 if floatpreset==-1: min_float=math.floor(custom_duration)-(min_fade1+min_fade2)
@@ -319,11 +356,13 @@ h2o2     =pygame.image.load(abspath+'guiassets/settings/h2o2.png')
 volume   =pygame.image.load(abspath+'guiassets/settings/volume.png')
 audio    =pygame.image.load(abspath+'guiassets/settings/audio.png')
 levels   =pygame.image.load(abspath+'guiassets/settings/levels.png')
-wifi     =pygame.image.load(abspath+'guiassets/settings/blank.png')
+blank    =pygame.image.load(abspath+'guiassets/settings/blank.png')
 runtime  =pygame.image.load(abspath+'guiassets/settings/runtime.png')
 rt_edit  =pygame.image.load(abspath+'guiassets/settings/rt_edit.png')
 trends   =pygame.image.load(abspath+'guiassets/settings/trends.png')
 check    =pygame.image.load(abspath+'guiassets/settings/check.png')
+node     =pygame.image.load(abspath+'guiassets/settings/node.png')
+nodeon   =pygame.image.load(abspath+'guiassets/settings/nodeon.png')
 
 blackout     =pygame.Surface((800,480))
 amber        =pygame.Surface((800,480))
@@ -379,25 +418,30 @@ wifi_button      = pygame.Rect(668,  78-26, 76,76)
 runtime_button   = pygame.Rect(668, 78+(352-78)/2-26, 76,76)
 trends_button    = pygame.Rect(668, 352-26, 76,76)
 
-filter_button    = pygame.Rect(170,  80-26, 160,160)
+filter_button    = pygame.Rect(170,  70-26, 160,165)
+fplus_button     = pygame.Rect(250,  190, 80,70)
 h2o2_button      = pygame.Rect(460,  80-26, 160,160)
 volume_button    = pygame.Rect(170-20, 280-26, 160+30,160)
 custom_button    = pygame.Rect(400, 270-26, 270,160)
 
-cmusicin_button  = pygame.Rect(160, 130-26, 245,100)
-cmusicout_button = pygame.Rect(160, 230-26, 245,100)
-clightin_button  = pygame.Rect(405, 130-26, 245,100)
-clightout_button = pygame.Rect(405, 230-26, 245,100)
-clength_button   = pygame.Rect(160, 360-26, 245,100)
-ccol_button      = pygame.Rect(660,  55-26,  95,390)
-ctherapy_button  = pygame.Rect(410, 370-26,  76, 76)
+cval_button      = pygame.Rect(180, 50, 245,100)
+#cmusicin_button  = pygame.Rect(160, 130-26, 245,100)
+#cmusicout_button = pygame.Rect(160, 230-26, 245,100)
+#clightin_button  = pygame.Rect(405, 130-26, 245,100)
+#clightout_button = pygame.Rect(405, 230-26, 245,100)
+#clength_button   = pygame.Rect(160, 360-26, 245,100)
+ccol_button      = pygame.Rect(80, 360, 640, 60)
+atherapy_button  = pygame.Rect(480, 17,  76, 76)
+ctherapy_button  = pygame.Rect(480, 93,  76, 76)
 
-tcur_button      = pygame.Rect(155,  70-26, 270,120)
-ttarg_button     = pygame.Rect(440,  70-26, 270,120)
-pH_button        = pygame.Rect(155, 200-26, 270,120)
-ORP_button       = pygame.Rect(440, 200-26, 270,120)
-specgrav_button  = pygame.Rect(155, 330-26, 270,120)
-lbssalt_button   = pygame.Rect(440, 330-26, 270,120)
+tcur_button      = pygame.Rect(155+3,  70-26, 240,120)
+ttarg_button     = pygame.Rect(440-30,  70-26, 240,120)
+pH_button        = pygame.Rect(155-125, 200-26, 240,120)
+ORP_button       = pygame.Rect(440-163, 200-26, 240,120)
+specgrav_button  = pygame.Rect(155-125, 330-26, 240,120)
+lbssalt_button   = pygame.Rect(440-163, 330-26, 240,120)
+topon_button     = pygame.Rect(523, 200-26, 240,120)
+topoff_button    = pygame.Rect(523, 330-26, 240,120)
 
 tr_vert0_button  = pygame.Rect( 53,143,40,40)
 tr_vert1_button  = pygame.Rect( 53,193,40,40)
@@ -423,7 +467,7 @@ rt_reset_button  = pygame.Rect(300, 330-26, 200,150)
 
 gradbar_button   = pygame.Rect(gradBarLeft,gradBarTop,gradBarWidth,gradBarHeight)
 
-default_font      = pygame.font.Font(abspath+"guiassets/kozgoxl.otf",16)
+default_font      = pygame.font.Font(abspath+"guiassets/kozgoxl.otf",18)
 tankname_font     = pygame.font.Font(abspath+"guiassets/kozgoxl.otf",54)
 status_font       = pygame.font.Font(abspath+"guiassets/kozgoxl.otf",30)
 
@@ -453,7 +497,7 @@ def tankname():
     global floatelapsed
     global timeleft_str
     global levels_button
-    global tname,debugstring
+    global tname
 
     tn=tname
     numletters=len(tn)
@@ -492,7 +536,6 @@ def tankname():
         if alertMode: timeleft_str+="ALERT"
         elif lightMode: timeleft_str+="LIGHT ON"
     
-    #debugstring=str(time.time()-cur_temp_refresh)
     if time.time()>cur_temp_refresh+6: thermoString=time_str(time.time())+" • - °F"
     else: 
         try: thermoString=time_str(time.time())+" • "+round_s(cur_temp+t_offset,1)+" °F"
@@ -618,7 +661,7 @@ def repop_trendarr():
         else: y=trendarr[x]
         
 def trendgraph():
-    global trendmode,trendarr,debugstring,xpos,domain
+    global trendmode,trendarr,xpos,domain
     
     pygame.draw.line(stage, (112,128,232), (100,150),(700,150), 2)
     pygame.draw.line(stage, (112,128,232), (100,150),(100,400), 2)
@@ -762,8 +805,6 @@ def trendgraph():
         stage.blit(vtime, (100+xpos+5, 153+h-func(val_ )+5))
 
 
-    #debugstring=str((trendmode,pos))
-    
 #-----------------------------------------------------------------
 keybshift=False
 keybcaps=False
@@ -774,7 +815,7 @@ blink=time.time()
 blinktoggle=True
 keyrepeatdelay=-1
 def keyboard():
-    global debugstring,blink,blinktoggle
+    global blink,blinktoggle
     
     kreg=[
         "`1234567890-=",
@@ -795,7 +836,6 @@ def keyboard():
     board = pygame.Surface((wb,hb))
     board.fill((25,25,25))
     
-    #debugstring=str(pos)
     def insert(l):
         global keyb_i,keyb_str,keybshift,keybcaps,keybEnter
         
@@ -832,8 +872,7 @@ def keyboard():
         if keyb_i>len(keyb_str):keyb_i=len(keyb_str)
         
     def addkey(l,x,y,w):
-        global debugstring,blink,blinktoggle,keyrepeatdelay
-        #debugstring=l
+        global blink,blinktoggle,keyrepeatdelay
         c=(128,203,224)
         if (l=='Shift' and keybshift) or (l=='Caps' and keybcaps): c=(255,255,255)
         keyrect=pygame.Rect(x, y, w, 51+50*(l=='Enter'))
@@ -906,7 +945,7 @@ usb_audiofile=''
 usb_index=-1
 usb_buffer=False
 def audiowidgets():    
-    global audiomode,debugstring,widestusbaudioname,usb_yoffset,stepperSpeed,even,usb_bottom,usb_audiofile,usb_index,usb_buffer
+    global audiomode,widestusbaudioname,usb_yoffset,stepperSpeed,even,usb_bottom,usb_audiofile,usb_index,usb_buffer
     #jkl;
     title =tankname_font.render("AUDIO SOURCE",1,(132, 202, 232))
     stage.blit(title,  (410- title.get_rect().width/2,  30))
@@ -929,7 +968,6 @@ def audiowidgets():
         filelist.blit(t2, (w/2-t2.get_rect().width/2, h/2))        
             
     if audiomode==AUDIO_USB:
-        #debugstring=str(pos)
         if mx>665 and mx<740 and my> 50 and my<100 and mouseL: 
             usb_yoffset+=(1+stepperSpeed)
             if stepperSpeed<10: stepperSpeed+=.5
@@ -1095,7 +1133,6 @@ def runtimebars():
     w=398
     h=44
 
-    #asdf
     if time.time()>last_rt+1:
         last_rt=time.time()
         foutprep+=1
@@ -1137,13 +1174,15 @@ def runtimebars():
     stage.blit(rt_solution_text, (228+w,289+13))
     
 #-----------------------------------------------------------------
-def levelsbars(cur,targ,pH,ORP,sg,ls):
+def levelsbars(cur,targ,pH,ORP,sg,ls,hon,hoff):
     curtext  = round_s(cur,1)
     targtext = round_s(targ,1)
     pHtext   = round_s(pH,1)
     ORPtext  = str(int(ORP+0))
     sgtext   = round_s(sg,2)
     lstext   = str(int(ls+0))
+    hontext  = minsec(hon/60)
+    hofftext = minsec(hoff/60)
     
     cur  = tankname_font.render(curtext, 1,(28,103,124))
     targ = tankname_font.render(targtext,1,(28,103,124))
@@ -1151,53 +1190,155 @@ def levelsbars(cur,targ,pH,ORP,sg,ls):
     ORP  = tankname_font.render(ORPtext, 1,(28,103,124))
     sg   = tankname_font.render(sgtext,  1,(28,103,124))
     ls   = tankname_font.render(lstext,  1,(28,103,124))
-
-    #(155,  70-26, 270,120)
-    #(440,  70-26, 270,120)
-    #(155, 200-26, 270,120)
-    #(440, 200-26, 270,120)
-    #(155, 330-26, 270,120)
-    #(440, 330-26, 270,120)
-    #asdf
-    stage.blit(cur, (290 -  cur.get_rect().width/2, 100-26))        
-    stage.blit(targ,(575 - targ.get_rect().width/2, 100-26))        
-    stage.blit(pH,  (290 -   pH.get_rect().width/2, 235-26))        
-    stage.blit(ORP, (575 -  ORP.get_rect().width/2, 235-26))        
-    stage.blit(sg,  (290 -   sg.get_rect().width/2, 360-26))        
-    stage.blit(ls,  (575 -   ls.get_rect().width/2, 360-26))        
+    hon  = tankname_font.render(hontext, 1,(28,103,124))
+    hoff = tankname_font.render(hofftext,1,(28,103,124))
+    
+    stage.blit(cur, (278 -  cur.get_rect().width/2, 100-26))
+    stage.blit(targ,(528 - targ.get_rect().width/2, 100-26))
+    stage.blit(pH,  (148 -   pH.get_rect().width/2, 235-26))
+    stage.blit(ORP, (398 -  ORP.get_rect().width/2, 235-26))
+    stage.blit(hon, (644 -  hon.get_rect().width/2, 235-26))
+    stage.blit(sg,  (148 -   sg.get_rect().width/2, 360-26))
+    stage.blit(ls,  (398 -   ls.get_rect().width/2, 360-26))    
+    stage.blit(hoff,(644 - hoff.get_rect().width/2, 360-26))
 
 #-----------------------------------------------------------------
-def custombar(muin,mout,liin,lout,dur):
-    #asdf
-    if muin=='0' or muin=='0.0': muin=mout='Off'
-    def minsec(n):
+ocs=0
+def minsec(n):
         min=math.floor(n)
         sec=int((n-min)*60)
         return str(min)+':'+('0'+str(sec))[-2:]
-    muin_=tankname_font.render(minsec(muin),1,(28,103,124))
-    mout_=tankname_font.render(minsec(mout),1,(28,103,124))
-    liin_=tankname_font.render(minsec(liin),1,(28,103,124))
-    lout_=tankname_font.render(minsec(lout),1,(28,103,124))
-    dur_ =tankname_font.render(dur,1,(28,103,124))
     
-    stage.blit(muin_, (285-muin_.get_rect().width/2, 154-26))        
-    stage.blit(mout_, (285-mout_.get_rect().width/2, 254-26))        
-    stage.blit(liin_, (530-liin_.get_rect().width/2, 154-26))        
-    stage.blit(lout_, (530-lout_.get_rect().width/2, 254-26))        
-    stage.blit( dur_, (285- dur_.get_rect().width/2, 382-26))        
+def custombar():
+    global min_shower,min_fade1,min_fade1_m,custom_duration,min_fade2,min_fade2_m,min_fade1_d,min_fade2_d
+    global ocs,colvals,reloaded
+        
+    cvar=[
+        min_shower,
+        min_fade1,
+        min_fade1_m,
+        custom_duration,
+        min_fade2,
+        min_fade2_m,
+        min_fade1_d,
+        min_fade2_d
+    ]
+    
+    cname=[
+        "Shower Duration (m:s)",
+        "Fade-out Lights for (m:s)",
+        "Fade-out Music for (m:s)",
+        "Float Duration (m:s)",
+        "Fade-in Lights for (m:s)",
+        "Fade-in Music for (m:s)",
+        "Wait to Fade-out Music for (m:s)",
+        "Fade-in Music Early (m:s)"
+    ]
+    
+    if node_select==0: min_shower      = tvar
+    if node_select==1: min_fade1       = tvar
+    if node_select==2: min_fade1_m     = tvar
+    if node_select==3: custom_duration = tvar
+    if node_select==4: min_fade2       = tvar
+    if node_select==5: min_fade2_m     = tvar
+    if node_select==6: min_fade1_d     = tvar
+    if node_select==7: min_fade2_d     = tvar
+    
+    t=tankname_font.render(minsec(cvar[node_select]),1,(28,103,124))
+    n=default_font.render(cname[node_select],1,(255,255,255))
+    stage.blit(n, (300-n.get_rect().width/2, 60-26))
+    stage.blit(t, (300-t.get_rect().width/2, 100-26))
+    
+    #asdf
+    cw=630
+    cx=color_select*cw/15
+    r=[255,255,255,255,255,255,128,  0,  0,  0,  0,  0,128,255,255][color_select]
+    g=[205,  0, 64,128,192,255,255,255,255,255,128,  0,  0,  0,  0][color_select]
+    b=[155,  0,  0,  0,  0,  0,  0,  0,128,255,255,255,255,255,128][color_select]
+    w=[255,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0][color_select]
+    
+    if ocs!=color_select:
+        colvals={
+            "colval_r":r/255,
+            "colval_g":g/255,
+            "colval_b":b/255,
+            "colval_w":w/255
+            }
+        reloaded=True        
+    
+    ocs=color_select
+    
+    pygame.draw.rect(stage,(r,g,b),pygame.Rect(86+cx, 370, 37, 37),1)
+    #pygame.draw.rect(stage,(200,200,200),pygame.Rect(86+cx, 370, 37, 37),1)
+    
 
 #-----------------------------------------------------------------
+node_select=0
 def gradbar():
+    global node_select, tvar
     if gradsurface: 
         gradsurface.set_alpha(math.floor(.65*255)) # 65% grad bar... remember ;) ?
         stage.blit(gradsurface, (gradBarLeft, gradBarTop-26))
+    
+    min_float_=min_float
+    if customscreen: min_float_=custom_duration
         
     m1 = default_font.render("5min",1,(140,140,128))
-    m2 = default_font.render(str(math.floor(min_float+min_shower+(min_fade1+min_fade2)))+"min",1,(140,140,128))
+    m2 = default_font.render(str(math.floor(min_float_+min_shower+(min_fade1+min_fade2)))+"min",1,(140,140,128))
     stage.blit(m1, (gradBarLeft+_shower, gradBarTop-20-26))
     stage.blit(m2, (gradBarLeft+_shower+(_fade1+_fade2)+_float-0*m2.get_rect().width, gradBarTop-20-26))
     
+    if customscreen:
+        w=gradBarWidth
+
+        totalDuration=min_shower+min_fade1+min_float_+min_fade2+min_wait+min_plo+min_phi
+        __shower =w/totalDuration*min_shower
+        __fade1  =w/totalDuration*min_fade1
+        __fade1d =w/totalDuration*min_fade1_d
+        __fade1m =w/totalDuration*min_fade1_m
+        __float  =w/totalDuration*min_float_
+        __fade2  =w/totalDuration*min_fade2
+        __fade2m =w/totalDuration*min_fade2_m
+        __fade2d =w/totalDuration*min_fade2_d
+        __wait   =w/totalDuration*min_wait
+        __plo    =w/totalDuration*min_plo
+        __filter =w/totalDuration*min_phi
+        
+        s= (gradBarLeft-17+__shower/2                                        , gradBarTop-26-17+gradBarHeight*1/2)
+        l1=(gradBarLeft-17+__shower+__fade1/2                                , gradBarTop-26-17+gradBarHeight*1/5)
+        d1=(gradBarLeft-17+__shower+__fade1d                                 , gradBarTop-26-17+gradBarHeight*1/2)
+        m1=(gradBarLeft-17+__shower+__fade1d+__fade1m                        , gradBarTop-26-17+gradBarHeight*1/1)
+        f= (gradBarLeft-17+__shower+__fade1+__float/2                        , gradBarTop-26-17+gradBarHeight*7/20)
+        l2=(gradBarLeft-17+__shower+__fade1+__float+__fade2/2                , gradBarTop-26-17+gradBarHeight*1/5)
+        d2=(gradBarLeft-17+__shower+__fade1+__float+__fade2-__fade2d         , gradBarTop-26-17+gradBarHeight*1/2)
+        m2=(gradBarLeft-17+__shower+__fade1+__float+__fade2-__fade2d-__fade2m, gradBarTop-26-17+gradBarHeight*1/1)
+
+        nodeimg=[node,nodeon]
+        if not acoustictherapymode: stage.blit(nodeimg[node_select==6], d1)
+        if not acoustictherapymode: stage.blit(nodeimg[node_select==7], d2)
+        if not colortherapymode:    stage.blit(nodeimg[node_select==4], l2)
+        if not acoustictherapymode: stage.blit(nodeimg[node_select==5], m2)
+        if not colortherapymode:    stage.blit(nodeimg[node_select==1], l1)
+        if not acoustictherapymode: stage.blit(nodeimg[node_select==2], m1)
+        stage.blit(nodeimg[node_select==3], f)
+        stage.blit(nodeimg[node_select==0], s)
+        
+        ons=node_select
+        if go and not mlock and pygame.Rect(d2[0], d2[1], 35, 35).collidepoint(pos): node_select=7
+        if go and not mlock and pygame.Rect(d1[0], d1[1], 35, 35).collidepoint(pos): node_select=6
+        if go and not mlock and pygame.Rect(m2[0], m2[1], 35, 35).collidepoint(pos): node_select=5
+        if go and not mlock and pygame.Rect(l2[0], l2[1], 35, 35).collidepoint(pos): node_select=4
+        if go and not mlock and pygame.Rect( f[0],  f[1], 35, 35).collidepoint(pos): node_select=3
+        if go and not mlock and pygame.Rect(m1[0], m1[1], 35, 35).collidepoint(pos): node_select=2
+        if go and not mlock and pygame.Rect(l1[0], l1[1], 35, 35).collidepoint(pos): node_select=1
+        if go and not mlock and pygame.Rect( s[0],  s[1], 35, 35).collidepoint(pos): node_select=0
+        
+        if ons!=node_select: tvar=[min_shower,min_fade1,min_fade1_m,min_float_,min_fade2,min_fade2_m,min_fade1_d,min_fade2_d][node_select]
+        
+    
 #-----------------------------------------------------------------
+redrawgradbarTime=time.time()
+wait_to_redrawgradbar=False
 def drawgradbar():
     global gradsurface
     global progbar
@@ -1205,6 +1346,14 @@ def drawgradbar():
     global gradBarHeight
     global _shower,_fade1,_float,_fade2,_wait,_plo,_filter
     global totalDuration
+    global redrawgradbarTime,wait_to_redrawgradbar
+    
+    if time.time()<redrawgradbarTime+1: 
+        wait_to_redrawgradbar=True
+        return
+        
+    redrawgradbarTime=time.time()
+    wait_to_redrawgradbar=False
     
     h=gradBarHeight
     w=gradBarWidth
@@ -1212,18 +1361,25 @@ def drawgradbar():
     _g=0
     _b=0
 
-    totalDuration=min_shower+min_fade1+min_float+min_fade2+min_wait+min_plo+min_phi
+    min_float_=min_float
+    if customscreen: min_float_=custom_duration
+    
+    totalDuration=min_shower+min_fade1+min_float_+min_fade2+min_wait+min_plo+min_phi
     _shower =w/totalDuration*min_shower
     _fade1  =w/totalDuration*min_fade1
+    _fade1d =w/totalDuration*min_fade1_d
     _fade1m =w/totalDuration*min_fade1_m
-    _float  =w/totalDuration*min_float
+    _float  =w/totalDuration*min_float_
     _fade2  =w/totalDuration*min_fade2
     _fade2m =w/totalDuration*min_fade2_m
+    _fade2d =w/totalDuration*min_fade2_d
     _wait   =w/totalDuration*min_wait
     _plo    =w/totalDuration*min_plo
     _filter =w/totalDuration*min_phi
 
-    if floatpreset==60 or floatpreset==90: _fade1=_fade1m=_fade2=_fade2m =w/totalDuration*1
+    if floatpreset==60 or floatpreset==90 and not customscreen:
+        _fade1=_fade1m=_fade2=_fade2m=w/totalDuration*1
+        _fade1d=_fade2d=0
         
     gradsurface = pygame.Surface((w,h))
     progbar     = pygame.Surface((w,h))
@@ -1242,16 +1398,17 @@ def drawgradbar():
         if n>255: n=255
         return n
 
-    for x in range(0,799):
+    for x in range(0,w):
         #THE GRADIENT
-        cth=(colorthereapymode)*196
+        ath=acoustictherapymode
+        cth=(colortherapymode)*196
         
         mus_y=1
-        if x>_shower: mus_y=1-(x-_shower)/(_fade1m+.0001)
-        if x>_shower+_fade1+_float+_fade2-_fade2m: mus_y=(x-_shower-_fade1-_float-_fade2+_fade2m)/(_fade2m+.0001)
+        if x>_shower+_fade1d: mus_y=1-(x-_shower-_fade1d)/(_fade1m+.0001)
+        if x>_shower+_fade1+_float+_fade2-_fade2m-_fade2d: mus_y=(x-_shower-_fade1-_float-_fade2+_fade2m+_fade2d)/(_fade2m+.0001)
         if mus_y<0: mus_y=0
         if mus_y>1: mus_y=1
-        if _fade1m<.1: mus_y=1
+        if ath: mus_y=1
         
         if x<_shower: _r=_g=_b=255                                                                                                        #shower
         if x>_shower and x<_shower+_fade1: _r=_g=_b=byteclamp(cth+(1-(x-_shower)/_fade1)*(255-cth))                                       #fade1
@@ -1281,7 +1438,6 @@ def drawgradbar():
             _b=byteclamp(_b*(.3*c_b+.7))
             
         pygame.draw.line(gradsurface, (_r,_g,_b), (x,0),(x,h), 1)
-        #pygame.draw.line(gradsurface, (byteclamp(16+1.5*_r),byteclamp(16+1.5*_g),byteclamp(16+1.5*_b),), (x,h-mus_y*h/2),(x,h), 1)
         pygame.draw.line(gradsurface, (byteclamp(32+1.5*_r),byteclamp(32+1.5*_g),byteclamp(32+1.5*_b),), (x,h-mus_y*h/2),(x,h), 1)
             
     pygame.draw.line(gradsurface, (0,0,0), (_shower,0),(_shower,h), 1)
@@ -1329,7 +1485,7 @@ cur_temp_refresh=0
 def getserverupdates():
     try:
         while alive:
-            global cur_temp,alertMode,lightMode,debugstring,cur_temp_refresh,usb_buffer
+            global cur_temp,alertMode,lightMode,cur_temp_refresh,usb_buffer
             if server.data!='':
                 try: j=json.loads(server.data)
                 except Exception as e:
@@ -1359,7 +1515,9 @@ if trendsscreen: readlog()
 if audioscreen and audiomode==AUDIO_USB: get_usbmedia()
 
 #================================ THE MAIN LOOP ================================                
-if settingsscreen and manualfilter: layer1=filter
+if settingsscreen and manualfilter: 
+    layer1=filter
+    autoshutoff=time.time()+15*60
 if settingsscreen and manualh2o2: layer2=h2o2
 
 OOO="               "
@@ -1378,11 +1536,10 @@ old_manualh2o2=manualh2o2
 old_max_vol=max_vol
 old_targ_temp=targ_temp_i=round(targ_temp,1)
 old_t_offset=t_offset
-#old_min_fade1=min_fade1
-#old_min_fade2=min_fade2
-#old_min_fade1_m=min_fade1_m
-#old_min_fade2_m=min_fade2_m
 change_tankname=False
+tvar=min_shower
+color_select=0
+colvals_={}
 
 mouseL=old_mouseL=0
 fout_ct_time=time.time()
@@ -1394,10 +1551,6 @@ while alive:
     alerts()
     
     for e in pygame.event.get(): continue
-    #try: debugstring=(str(time.time()%10)[:4]+" : "+str(e.dict['pos'])+" | "+str(pygame.event.get_grab()))
-    #except: pass#print('exception@768')
-    
-    #pygame.event.pump()
     if time.time()-start<2:
         bglogo.set_alpha(introfade1)
         introfade1+=10
@@ -1454,16 +1607,19 @@ while alive:
         on_trends    =    trends_button.collidepoint(pos)
 
         on_filter    =    filter_button.collidepoint(pos)
+        on_fplus     =     fplus_button.collidepoint(pos)
         on_h2o2      =      h2o2_button.collidepoint(pos)
         on_volume    =    volume_button.collidepoint(pos)
         on_custom    =    custom_button.collidepoint(pos)
 
-        on_cmusicin  =  cmusicin_button.collidepoint(pos)
-        on_cmusicout = cmusicout_button.collidepoint(pos)
-        on_clightin  =  clightin_button.collidepoint(pos)
-        on_clightout = clightout_button.collidepoint(pos)
-        on_clength   =   clength_button.collidepoint(pos)
+        on_cval      =      cval_button.collidepoint(pos)
+        #on_cmusicin  =  cmusicin_button.collidepoint(pos)
+        #on_cmusicout = cmusicout_button.collidepoint(pos)
+        #on_clightin  =  clightin_button.collidepoint(pos)
+        #on_clightout = clightout_button.collidepoint(pos)
+        #on_clength   =   clength_button.collidepoint(pos)
         on_ccol      =      ccol_button.collidepoint(pos)
+        on_atherapy  =  atherapy_button.collidepoint(pos)
         on_ctherapy  =  ctherapy_button.collidepoint(pos)
         
         on_tcur      =      tcur_button.collidepoint(pos)
@@ -1472,6 +1628,8 @@ while alive:
         on_ORP       =       ORP_button.collidepoint(pos)
         on_specgrav  =  specgrav_button.collidepoint(pos)
         on_lbssalt   =   lbssalt_button.collidepoint(pos)
+        on_topon     =     topon_button.collidepoint(pos)
+        on_topoff    =    topoff_button.collidepoint(pos)
         
         on_rt_filter = rt_filter_button.collidepoint(pos)
         on_rt_uvbulb = rt_uvbulb_button.collidepoint(pos)
@@ -1525,12 +1683,13 @@ while alive:
                 alive = False
                 printer.p(OOO+"zerogAlive === ending...")
 
-            #asdf
             custom_condition=(on_custom and settingsscreen and exScr)
             gradbar_condition=(on_gradbar and floatscreen and exScr and not settingsscreen)
             if not mlock and go and (custom_condition or gradbar_condition): 
                 mlock=True
                 customscreen = True
+                #asdf
+                reloaded=True
                 printer.fout('customscreen',str(customscreen)) 
             
             if on_audio and go and settingsscreen and exScr: 
@@ -1577,7 +1736,6 @@ while alive:
                 
                 if (on_sixtymin or on_ninetymin or on_custommin) and go: 
                     floatscreen = True
-                    #if floatpreset==60 or floatpreset==90: min_fade1=min_fade2=min_fade1_m=min_fade2_m=1
                     if floatpreset==-1: min_float = math.floor(custom_duration)-(min_fade1+min_fade2)
                     else: min_float = floatpreset-(min_fade1+min_fade2)
                     #printer.fout('min_float',str(min_float))
@@ -1595,12 +1753,52 @@ while alive:
             #============================================================================
             if customscreen:
                 layer0=custom
-                #asdf
-                if on_ctherapy and go and not mlock: 
-                    colorthereapymode=not colorthereapymode
-                    client.que({"colorthereapymode":colorthereapymode})
+                
+                if on_atherapy and go and not mlock: 
+                    acoustictherapymode=not acoustictherapymode
+                    client.que({"acoustictherapymode":acoustictherapymode})
                     reloaded=True
+                    
+                if on_ctherapy and go and not mlock: 
+                    colortherapymode=not colortherapymode
+                    client.que({"colortherapymode":colortherapymode})
+                    reloaded=True
+                
+                if on_cval and mouseL and not mlock:
+                    stepper=(pos[0]-cval_button.left) / cval_button.width - .5
+                    if stepper<0 and stepperSpeed==0: tvar-=1/60
+                    if stepper>0 and stepperSpeed==0: tvar+=1/60
+                    if stepper<0: tvar-=stepperSpeed
+                    if stepper>0: tvar+=stepperSpeed
+                    stepperSpeedup(1/1)
+                    if tvar<0: tvar=0
+                    if tvar>999: tvar=999
+                    #########if tvar+min_fade2_m>custom_duration:
+                    #########    if tvar>custom_duration: tvar=custom_duration
+                    #########    min_fade2_m=custom_duration-tvar
+                    fout_customvar=True
+                    reloaded=True
+                    min_float=custom_duration
+                    floatpreset=-1
+                elif fout_customvar:
+                    printer.fout(['min_shower','min_fade1','min_fade1_m','custom_duration','min_fade2','min_fade2_m','min_fade1_d','min_fade2_d'][node_select], str(tvar))
+                    client.que({['null','fade1_light','fade1_music','null','fade2_light','fade2_music','null','null'][node_select]:tvar})
+                    fout_customvar=False
+                elif on_cval: stepperSpeed=0
     
+                if on_ccol and mouseL and not mlock:
+                    #asdf
+                    cw=630
+                    color_select=round((pos[0]-104)/cw*15)
+                    if color_select<0: color_select=0
+                    if color_select>14: color_select=14
+                    
+                if on_ccol and not mouseL and not mlock and colvals_!=json.dumps(colvals):
+                    colvals_=json.dumps(colvals)
+                    client.que({"colvals":colvals_})
+                    printer.fout('colvals',colvals_)
+                    
+                """
                 if on_ccol and go and not mlock:
                     hpos=-.15+1/.75*(pos[0]-ccol_button.left)/(ccol_button.width-20)
                     vpos=-.05+1/.9*(pos[1]-ccol_button.top)/ccol_button.height
@@ -1610,7 +1808,6 @@ while alive:
                     b=clamp( 2*hpos*( clamp(1-(.500-vpos)/.167)*(vpos<.667) + clamp((1.00-vpos)/.167)*(vpos>=.667) ) )
                     w=clamp((hpos-.5)*2)
                     if w==1: r=g=b=w
-                    #debugstring=str((int(100*r),int(100*g),int(100*b),int(100*w)))
                     colvals={
                         "colval_r":r,
                         "colval_g":g,
@@ -1731,6 +1928,7 @@ while alive:
                     min_float = math.floor(custom_duration)-(min_fade1+min_fade2)
                     reloaded=True
                 elif on_clength: stepperSpeed=0
+                """
 
 
             #============================================================================
@@ -1778,7 +1976,7 @@ while alive:
             #                             WIFISCREEN
             #============================================================================
             if wifiscreen:
-                layer0=wifi
+                layer0=blank
                         
             #============================================================================
             #                            RUNTIMESCREEN
@@ -1908,7 +2106,7 @@ while alive:
                 elif fout_currentTemperature:
                     t_offset=ct-old_cur_temp
                     old_cur_temp=-1
-                    printer.fout('t_offset',str(t_offset))
+                    printer.fout('t_offset',str(t_offset))                    
                     fout_currentTemperature=False
                 elif not mouseL:
                     try: 
@@ -1993,6 +2191,37 @@ while alive:
                     fout_lbs=False
                 elif not mouseL: stepperSpeed=0
             
+                if on_topon and mouseL:
+                    stepper=(pos[0]-topon_button.left) / topon_button.width - .5
+                    if stepper<0 and stepperSpeed==0: topon_lev-=1
+                    if stepper>0 and stepperSpeed==0: topon_lev+=1
+                    if stepper<0: topon_lev-=stepperSpeed
+                    if stepper>0: topon_lev+=stepperSpeed
+                    stepperSpeedup(1)
+                    if topon_lev<0: topon_lev=0
+                    if topon_lev>4000: topon_lev=4000
+                    fout_ton=True
+                elif fout_ton:
+                    client.que({"topon_lev":topon_lev})
+                    printer.fout('topon_lev',str(topon_lev))
+                    fout_ton=False
+                elif not mouseL: stepperSpeed=0
+                
+                if on_topoff and mouseL:
+                    stepper=(pos[0]-topoff_button.left) / topoff_button.width - .5
+                    if stepper<0 and stepperSpeed==0: topoff_lev-=1
+                    if stepper>0 and stepperSpeed==0: topoff_lev+=1
+                    if stepper<0: topoff_lev-=stepperSpeed
+                    if stepper>0: topoff_lev+=stepperSpeed
+                    stepperSpeedup(1)
+                    if topoff_lev<0: topoff_lev=0
+                    if topoff_lev>4000: topoff_lev=4000
+                    fout_toff=True
+                elif fout_toff:
+                    client.que({"topoff_lev":topoff_lev})
+                    printer.fout('topoff_lev',str(topoff_lev))
+                    fout_toff=False
+                elif not mouseL: stepperSpeed=0
             
             #============================================================================
             #                            FLOATSCREEN
@@ -2011,6 +2240,7 @@ while alive:
                         printer.fout('floatstart',str(floatstart))
                         printer.fout('floatInProgress',str(floatInProgress))
                         playfloat=True 
+                        fadeoutmusic=False
                         fadeinmusic=False
                         printer.fout('playfloat',str(playfloat))
                         def_p=0
@@ -2018,9 +2248,12 @@ while alive:
                         msg_obj={
                             "fade1_light":round(def_p+(1-def_p)*min_fade1,1),
                             "fade2_light":round(def_p+(1-def_p)*min_fade2,1),
+                            "fade1_mdlay":round(def_p+(1-def_p)*min_fade1_d,1),
                             "fade1_music":round(def_p+(1-def_p)*min_fade1_m,1),
                             "fade2_music":round(def_p+(1-def_p)*min_fade2_m,1),
-                            "colorthereapymode":colorthereapymode                            
+                            "fade2_mdlay":round(def_p+(1-def_p)*min_fade1_d,1),
+                            "acoustictherapymode":acoustictherapymode,
+                            "colortherapymode":colortherapymode
                             }
                         client.que(msg_obj)
 
@@ -2061,16 +2294,23 @@ while alive:
                     continue
                     
                 if not floatInProgress:
-                    if on_filter and go: manualfilter = not manualfilter
-                    if on_filter and go: printer.fout('manualfilter',str(manualfilter))
-                    if on_filter and go   and   manualfilter: layer1 = filter
-                    if on_filter and go and not manualfilter: layer1 = 0
+                    if on_filter and go and not manualfilter:
+                        manualfilter = True
+                        printer.fout('manualfilter',str(True))
+                        autoshutoff=time.time()+1+15*60
+                        layer1=filter
+                    elif on_filter and go and manualfilter and not on_fplus: 
+                        manualfilter = False
+                        printer.fout('manualfilter',str(False))
+                        autoshutoff=-1
+                        layer1 = 0
+                    elif on_fplus and go: autoshutoff+=15*60
                     
                     if on_h2o2 and go: manualh2o2 = not manualh2o2
                     if on_h2o2 and go: printer.fout('manualh2o2',str(manualh2o2))
                     if on_h2o2 and go   and   manualh2o2: layer2 = h2o2
-                    if on_h2o2 and go and not manualh2o2: layer2 = 0
-                
+                    if on_h2o2 and go and not manualh2o2: layer2 = 0                    
+                    
                 if on_volume and mouseL: 
                     max_vol=(pos[0]-10-volume_button.left) / (volume_button.width*.8)
                     if max_vol<0: max_vol=0
@@ -2093,7 +2333,7 @@ while alive:
         screens_END=mainscreen+2*floatscreen+4*settingsscreen
         if screens_BEGIN!=screens_END and floatscreen or reloaded: drawgradbar()
         if reloaded: 
-            floatpreset=-1
+        elif wait_to_redrawgradbar: drawgradbar()
             reloaded=False
         
         first_two_screens=(not settingsscreen and not levelsscreen and not customscreen)
@@ -2105,8 +2345,10 @@ while alive:
             stopcount=True
             countdown_num=6-(time.time()-countdownstart)
             if countdown_num<-.9:
-                client.que("reboot")
-                os.system('reboot')                
+                client.que({"reboot":"reboot"})
+                stopcount=False
+                time.sleep(2)
+                #os.system('reboot')
         elif on_sleep and not mouseL and first_two_screens:
             stopcount=False
             countdown_num=3
@@ -2117,6 +2359,10 @@ while alive:
         if changed>0 and oldTarg2 and exScr: stage.blit(oldTarg2,(422,42))
         
         if settingsscreen and exScr:
+            null,ipcn=os.path.splitext(wlan0_ip) #ip connection number
+            wifinum=default_font.render(ipcn[1:],1,(148,143,164))
+            stage.blit(wifinum, (707-wifinum.get_rect().width/2, 40))
+            
             for x in range(0,6):
                 a=0
                 if max_vol>(x+.5)/6: a=255
@@ -2125,7 +2371,22 @@ while alive:
                 #elif max_vol>(x-.25)/6: a=192
                 #volume.set_alpha(math.floor(a))
                 if changed>0 and a==255: stage.blit(volume,(174+x*26,316))
-                    
+            
+            if manualfilter:                
+                aso_string=timey(autoshutoff-time.time())
+                aso=status_font.render(aso_string,1,(248,43,24))
+                x=280+17
+                y=210+17
+                stage.blit(aso, (x-20-aso.get_rect().width, y-14))
+                #stage.blit(nodeon,(x-16,y-16))
+                pygame.draw.line(stage,(248,43,24),(x-10,y),(x+10,y),5)
+                pygame.draw.line(stage,(248,43,24),(x,y-10),(x,y+10),5)
+                if autoshutoff-time.time()<0:
+                    manualfilter = False
+                    printer.fout('manualfilter',str(False))
+                    autoshutoff=-1
+                    layer1 = 0
+                
         if not settingsscreen and exScr:
             tankname()
             if not lightMode: stage.blit(lightoff,(69, 363-26))
@@ -2134,8 +2395,6 @@ while alive:
                 gradbar()
                 statusbar(status_str)
                 if playfloat:
-                    #debugstring='playfloat'
-                    #progbar.set_alpha(.7)
                     stage.blit(progbar,(gradBarLeft-gradBarWidth+prog,gradBarTop-26))
                     x=gradBarLeft+prog
                     pygame.draw.line(stage,(255,255,255),(x-1,gradBarTop-26),(x-1,gradBarTop+gradBarHeight-26-1), 1)
@@ -2234,8 +2493,6 @@ while alive:
                         select=int((pos[1]-100)/50)
                         if select<0: select=0
                         if select<=len(wlanSorted) and select<=6: ssidSelect=wlanSorted[select]['ssid']
-                        #    select=len(wlanSorted)
-                        #    debugstring=wlanSorted[select]['ssid']
                     
             else:
                 mlock=True
@@ -2249,8 +2506,7 @@ while alive:
                     #os.system('echo "'+newkey+'" > /etc/wpa_supplicant/wpa_supplicant.conf')
                     newkey='\nnetwork={\n\tssid=\\"'+ssidSelect+'\\"\n\tpsk=\\"'+pwdSelect+'\\"\n\tkey_mgmt=WPA-PSK\n}'
                     os.system('echo "'+newkey+'" >> /etc/wpa_supplicant/wpa_supplicant.conf')
-                    #asdf
-                    
+                                        
                     os.system('/etc/init.d/networking restart')
                     os.system('systemctl daemon-reload')
                     connected=False
@@ -2259,7 +2515,7 @@ while alive:
                     while not connected and time.time()<ctime+7:
                         ctxt+='.'
                         connect=status_font.render(ctxt,1,(64,108,160))
-                        screen.blit(wifi,(0,0))
+                        screen.blit(blank,(0,0))
                         screen.blit(connect, (300, 200))
                         pygame.display.update()
                         os.system('ping -c1 google.com > '+abspath+'var/ping_result')
@@ -2275,7 +2531,7 @@ while alive:
                     
                     connect1=status_font.render(result1,1,(64,108,160))
                     connect2=status_font.render(result2,1,(64,108,160))
-                    screen.blit(wifi,(0,0))
+                    screen.blit(blank,(0,0))
                     screen.blit(connect1, (400-connect1.get_rect().width/2, 200))
                     screen.blit(connect2, (400-connect2.get_rect().width/2, 240))
                     pygame.display.update()
@@ -2309,20 +2565,18 @@ while alive:
         if levelsscreen:
             if on_back and go: levelsscreen=False
             if on_back and go: printer.fout('levelsscreen',str(levelsscreen))
-            levelsbars(ct,targ_temp,pH_lev,ORP_lev,specgrav_lev,lbssalt_lev)
+            levelsbars(ct,targ_temp,pH_lev,ORP_lev,specgrav_lev,lbssalt_lev,topon_lev,topoff_lev)
 
         if customscreen:                
-            #debugstring="cust"
-            if on_back and go: customscreen=False
-            if on_back and go: printer.fout('customscreen',str(customscreen))                
-            custombar(
-                min_fade1_m,
-                min_fade2_m,
-                min_fade1,
-                min_fade2,
-                str(math.floor(custom_duration)))
-            #asdf
-            if colorthereapymode: stage.blit(check,(424, 381-26))
+            if on_back and go: 
+                reloaded=True
+                customscreen=False                
+                printer.fout('customscreen',str(customscreen))
+            if reloaded: drawgradbar()
+            gradbar()
+            custombar()
+            if acoustictherapymode: stage.blit(check,(492, 33))
+            if colortherapymode: stage.blit(check,(492, 100))
             
         if on_tankname and go and first_two_screens: 
             change_tankname=not change_tankname
@@ -2358,6 +2612,10 @@ while alive:
                 tfade=(floatelapsed/60-min_shower)/min_fade1
                 if tfade>1: tfade=1
             
+            if floatelapsed/60>min_shower+min_fade2_d:
+                if not fadeoutmusic: client.que({"fadeoutmusic":True})
+                fadeoutmusic=True            
+            
             if floatelapsed/60>min_shower+min_fade1: 
                 tlights=False
                 phase=PHASE_FLOAT
@@ -2370,11 +2628,7 @@ while alive:
                 tfade=1-(floatelapsed/60-(min_shower+min_fade1+min_float))/min_fade2
                 if tfade<0: tfade=0
             
-            if floatelapsed/60>min_shower+min_fade1+min_float+min_fade2-min_fade2_m: 
-                #if min_fade2==min_fade2_m:
-                #    if not fadeinmusic: client.que({"phase":3,"fadeinmusic":True})
-                #else:
-                #    if not fadeinmusic: client.que({"fadeinmusic":True})
+            if floatelapsed/60>min_shower+min_fade1+min_float+min_fade2-min_fade2_m-min_fade2_d:
                 if not fadeinmusic: client.que({"fadeinmusic":True})
                 fadeinmusic=True
                 
@@ -2448,26 +2702,23 @@ while alive:
                     
         #floatelapsed=(time.time()-floatstart)*1+60*min_shower-5
         #floatelapsed=(time.time()-floatstart)*1+60*(min_shower+1*min_fade1)-10
-        floatelapsed=(time.time()-floatstart)*1+60*(min_shower+1*min_fade1+min_float)-10
+        #floatelapsed=(time.time()-floatstart)*1+60*(min_shower+1*min_fade1+min_float)-10
         #floatelapsed=(time.time()-floatstart)*1+60*(min_shower+(min_fade1+min_fade2)+min_float)-10
         #floatelapsed=(time.time()-floatstart)*1+60*(min_shower+(min_fade1+min_fade2)+min_float+min_wait)-10
         #floatelapsed=(time.time()-floatstart)*1+60*(min_shower+(min_fade1+min_fade2)+min_float+min_wait+min_plo)-10
         #floatelapsed=(time.time()-floatstart)*1+60*(min_shower+(min_fade1+min_fade2)+min_float+min_wait+min_plo+min_phi)-10
     
         #================ ================ ================ ================ ================ 
-        ########floatelapsed=(time.time()-floatstart)   #this is the not-testing-for one
-        #debugstring=str(int(min_float+min_fade1+min_fade2))
+        floatelapsed=(time.time()-floatstart)   #this is the not-testing-for one
         #================ ================ SPECIAL TEST MODES ================ ================ 
         #if int(min_float+min_fade1+min_fade2)==21: floatelapsed=(time.time()-floatstart)*60
         #if int(min_float+min_fade1+min_fade2)==22: floatelapsed=(time.time()-floatstart)*1+60*min_shower-5
         #if int(min_float+min_fade1+min_fade2)==23: floatelapsed=(time.time()-floatstart)*1+60*(min_shower+1*min_fade1+min_float)-5
         #================ ================ ================ ================ ================ 
-        #debugstring=str(fadeinmusic)
+
+        #debugstring=str(pos)
         debug = default_font.render(debugstring,1,(190,190,178))
         screen.blit(debug, (55, 450))
-        
-        #debug = default_font.render(debugstring,1,(90,90,78))
-        #screen.blit(debug, (55, 400))
         
         #================ ACTUALLY DRAW TARGET ZONES FOR TESTING ======================
         #pygame.draw.rect(screen, (0, 0,100),exit_button, 2)    
@@ -2492,16 +2743,19 @@ while alive:
         #pygame.draw.rect(screen, (100,0,0),trends_button, 2)
         
         #pygame.draw.rect(screen, (0,100,0),filter_button, 2)
+        #pygame.draw.rect(screen, (0,100,0),fplus_button, 2)
         #pygame.draw.rect(screen, (0,0,100),h2o2_button, 2)
         #pygame.draw.rect(screen, (0,0,100),volume_button, 2)
         #pygame.draw.rect(screen, (0,100,0),custom_button, 2)
 
+        #pygame.draw.rect(screen, (0,100,0),cval_button, 2)
         #pygame.draw.rect(screen, (0,100,0),cmusicin_button, 2)
         #pygame.draw.rect(screen, (0,100,0),cmusicout_button, 2)
         #pygame.draw.rect(screen, (0,100,0),clightin_button, 2)
         #pygame.draw.rect(screen, (0,100,0),clightout_button, 2)
         #pygame.draw.rect(screen, (0,100,0),clength_button, 2)
         #pygame.draw.rect(screen, (0,100,0),ccol_button, 2)
+        #pygame.draw.rect(screen, (0,100,0),atherapy_button, 2)
         #pygame.draw.rect(screen, (0,100,0),ctherapy_button, 2)
 
         #pygame.draw.rect(screen, (100,0,0),tcur_button, 2)
@@ -2510,6 +2764,8 @@ while alive:
         #pygame.draw.rect(screen, (0,100,0),ORP_button, 2)
         #pygame.draw.rect(screen, (0,0,100),specgrav_button, 2)
         #pygame.draw.rect(screen, (0,0,100),lbssalt_button, 2)
+        #pygame.draw.rect(screen, (0,0,100),topon_button, 2)
+        #pygame.draw.rect(screen, (0,0,100),topoff_button, 2)
 
         #pygame.draw.rect(screen, (100,0,0),rt_filter_button, 2)
         #pygame.draw.rect(screen, (100,0,0),rt_uvbulb_button, 2)
@@ -2557,8 +2813,12 @@ while alive:
             if sendAll or    old_targ_temp!=targ_temp_i:  msg_obj["targ_temp"]   = targ_temp_i
             if sendAll or   old_manualh2o2!=manualh2o2:   msg_obj["h2o2"]        = manualh2o2
             if sendAll or old_manualfilter!=manualfilter: msg_obj["filter"]      = manualfilter                
+            #these 6 shouldn't be here using the old!=new thing. it's awful. they should be qued like the rest of the messages are now
             
             if sendAll:
+                #make sure the sendall list is complete (some things on unabstractor's side need this message at initialization to get things going):
+                msg_obj["topon_lev"]=topon_lev
+                msg_obj["topoff_lev"]=topoff_lev
                 msg_obj["reinit"]=True
                 last_sendAll=time.time()
                 sendAll=False
@@ -2568,22 +2828,13 @@ while alive:
             client.que(msg_obj)
             if old_max_vol!=max_vol: printer.fout('max_vol',str(max_vol))
                 
-            
             #LOG!!!
-            
-            #old_lightMode=lightMode
-            #old_alertMode=alertMode
-            #old_phase=phase
             old_fade=fade
             old_manualfilter=manualfilter
             old_manualh2o2=manualh2o2
             old_max_vol=max_vol
             old_targ_temp=targ_temp_i
             old_t_offset=t_offset
-            #old_min_fade1=min_fade1
-            #old_min_fade2=min_fade2
-            #old_min_fade1_m=min_fade1_m
-            #old_min_fade2_m=min_fade2_m
             
 #============================================================================================================================================================#
 

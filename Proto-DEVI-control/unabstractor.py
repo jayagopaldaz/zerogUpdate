@@ -3,11 +3,13 @@
 
 mypi='control'
 myname="unabstractor.py"
-version="v.a.1.46"
+version="v.a.3.00"
 abspath='/home/pi/Desktop/'
+spoofthermo=False
 
 #=============================================================================================================================================================#
 import printer
+import i2crelay as relay
 import time
 import math
 import subprocess
@@ -43,6 +45,8 @@ fade2Light=60
 fade1Music=60
 fade2Music=60
 nomusicfade=False
+topHeatOn=30
+topHeatOff=3*60
 
 music = 0
 vlc_i=0
@@ -68,7 +72,8 @@ faded_out=False
 unfaded=False
 lightMode=not False #inverted for faster on (slower off)
 alertMode=False
-colorthereapymode=False
+acoustictherapymode=False
+colortherapymode=False
 
 fthermo=0
 session_60=True
@@ -86,11 +91,23 @@ p_heater2=33 #heater2
 p_heater3=35 #heater3
 p_heater4=37 #heater4
 
+i_heater1=0 #heater1
+i_heater2=1 #heater2
+i_heater3=2 #heater3
+i_heater4=3 #heater4
+
+
 #relay2
-p_plo=18
-p_phi=16
+p_plo =18
+p_phi =16
 p_h2o2=15
-p_uv=13
+p_uv  =13
+
+i_plo =4
+i_phi =5
+i_h2o2=6
+i_uv  =7
+
 
 p_user=8 #user light   (gray)
 p_alert=10 #emergency light    (purple)
@@ -154,6 +171,17 @@ def temperatureThread():
     global fthermo
     
     printer.p(OOO+"temperatureThread === entering circuit...")    
+    
+    if spoofthermo:
+        t=93
+        ti=0
+        while alive:
+            if t<93.5: ti+=.005
+            if t>93.5: ti-=.005
+            t+=ti
+            client.que({'fthermo':t})
+            time.sleep(1)
+                
     thermo_sensor=-1
     while alive:
         if thermo_sensor!=-1:
@@ -238,6 +266,10 @@ def actionThread():
                 GPIO.output(p_phi, OFF)
                 GPIO.output(p_h2o2, OFF)
                 GPIO.output(p_uv, OFF)
+                relay.relay(i_plo, (0))
+                relay.relay(i_phi, (0))
+                relay.relay(i_h2o2,(0))
+                relay.relay(i_uv,  (0))
                 glb.phase=glb.PHASE_NONE
             
             bit1=glb.phase%10
@@ -247,57 +279,86 @@ def actionThread():
             if bit1==glb.PHASE_PHI:
                 GPIO.output(p_plo, OFF)
                 GPIO.output(p_phi, ON)
-                if bit2==glb.PHASE_UV: GPIO.output(p_uv, ON)
-                else: GPIO.output(p_uv, OFF)
-                if bit3==glb.PHASE_H2O2: GPIO.output(p_h2o2, ON)
-                else: GPIO.output(p_h2o2, OFF)
+                relay.relay(i_plo, (0))
+                relay.relay(i_phi, (1))
+                
+                if bit2==glb.PHASE_UV: 
+                    GPIO.output(p_uv, ON)
+                    relay.relay(i_uv, (1))
+                else: 
+                    GPIO.output(p_uv, OFF)
+                    relay.relay(i_uv, (0))
+                    
+                if bit3==glb.PHASE_H2O2: 
+                    GPIO.output(p_h2o2, ON)
+                    relay.relay(i_h2o2, (1))
+                else: 
+                    GPIO.output(p_h2o2, OFF)
+                    relay.relay(i_h2o2, (0))
             
             if glb.phase==glb.PHASE_PLO:
                 #print('lo pump!!!!!!!!!!')
                 GPIO.output(p_plo, ON)
+                relay.relay(i_plo, (1))
             
         elif filtermode or h2o2mode:
             if filtermode:
                 GPIO.output(p_plo, OFF)
                 GPIO.output(p_phi, ON)
-                GPIO.output(p_uv, ON)
+                GPIO.output(p_uv,  ON)
+                relay.relay(i_plo, (0))
+                relay.relay(i_phi, (1))
+                relay.relay(i_uv,  (1))
             else:
                 GPIO.output(p_phi, OFF)
-                GPIO.output(p_uv, OFF)
+                GPIO.output(p_uv,  OFF)
+                relay.relay(i_phi, (0))
+                relay.relay(i_uv,  (0))
             if h2o2mode:
                 GPIO.output(p_h2o2, ON)
+                relay.relay(i_h2o2, (1))
             else:
                 GPIO.output(p_h2o2, OFF)
+                relay.relay(i_h2o2, (0))
 
         else:
             GPIO.output(p_plo, OFF)
             GPIO.output(p_phi, OFF)
-            GPIO.output(p_h2o2, OFF)
-            GPIO.output(p_uv, OFF)
+            GPIO.output(p_h2o2,OFF)
+            GPIO.output(p_uv,  OFF)
+            relay.relay(i_plo, (0))
+            relay.relay(i_phi, (0))
+            relay.relay(i_h2o2,(0))
+            relay.relay(i_uv,  (0))
             statusstring="Ready to float :)"
 
         calThermo=thermo_calibrate(fthermo)
-        
-        topHeatOn=30
-        topHeatOff=3*60
         
         #if calThermo<thermotarg and GPIO.input(p_heater1) and time.time()-h12cool>topHeatOff:
         if GPIO.input(p_heater1) and time.time()-h12cool>topHeatOff:
             GPIO.output(p_heater1,ON)
             GPIO.output(p_heater2,ON)
+            relay.relay(i_heater1, (1))
+            relay.relay(i_heater2, (1))
             h12hot=time.time()            
         if not GPIO.input(p_heater1) and time.time()-h12hot>topHeatOn:
             GPIO.output(p_heater1,OFF)
             GPIO.output(p_heater2,OFF)
+            relay.relay(i_heater1, (0))
+            relay.relay(i_heater2, (0))
             h12cool=time.time()
 
         if calThermo<thermotarg-0  and GPIO.input(p_heater3)==OFF:
             GPIO.output(p_heater3,ON)
             GPIO.output(p_heater4,ON)
+            relay.relay(i_heater3, (1))
+            relay.relay(i_heater4, (1))
             heaterchange=time.time()
         if calThermo>thermotarg+.5 and GPIO.input(p_heater3)==ON:
             GPIO.output(p_heater3,OFF)
             GPIO.output(p_heater4,OFF)
+            relay.relay(i_heater3, (0))
+            relay.relay(i_heater4, (0))
             heaterchange=time.time()
             
         """
@@ -523,16 +584,15 @@ def setlm(ll,vl,lm,vm):
 auxaudio=False
 def getserverupdates():
     global alive, init, auxaudio
-    global new_max_vol,lightMode,colorthereapymode
+    global new_max_vol,lightMode,acoustictherapymode,colortherapymode
     global fade1Light,fade2Light,fade1Music,fade2Music,nomusicfade
 
     while alive:
         if True:
             if server.data!='':
-                if server.data=='reboot': os.system('reboot')
                 if "reinit" not in server.data: print('unabstractor === serverdata:'+str(server.data))
-                #try: 
-                if True:
+                #if True:
+                try: 
                     j=json.loads(server.data)
                     jk=j.keys()
                     server.data='' #used it up ;)
@@ -558,15 +618,18 @@ def getserverupdates():
                     if 'colvals' in jk: printer.fout('colvals',str(j['colvals']))
                     if 'phase' in jk:
                         if glb.phase!=int(j['phase']):
-                            lum_=0+colorthereapymode*100
-                            fade1Light_=colorthereapymode+(not colorthereapymode)*fade1Light
+                            mus_=0+acoustictherapymode*100
+                            lum_=0+colortherapymode*100
+                            fade1Music_=acoustictherapymode+(not acoustictherapymode)*fade1Music
+                            fade1Light_=colortherapymode+(not colortherapymode)*fade1Light
                             glb.phase=int(j['phase'])
                             if glb.phase==glb.PHASE_NONE:   setlm(100, quickLight, 100,quickLight)                            
                             if glb.phase==glb.PHASE_SHOWER: setlm(100, quickLight, 100,quickLight)                            
-                            if glb.phase==glb.PHASE_FADE1:  setlm(lum_,fade1Light_,  0,fade1Music)
+                            if glb.phase==glb.PHASE_FADE1:  setLED(lum_,fade1Light_)#music set below
                             if glb.phase==glb.PHASE_FLOAT:  setLED(lum_,quickLight)#,   0,quickLight)
                             if glb.phase==glb.PHASE_FADE2:  setLED(100,fade2Light) #music set below
                             if glb.phase==glb.PHASE_WAIT:   setlm(100, quickLight, 100,quickLight)
+                    if 'fadeoutmusic' in jk: setMusic(mus_,_fade1Music)
                     if 'fadeinmusic' in jk: setMusic(100,fade2Music)
                     if 'fade1_light' in jk: fade1Light=60*float(j['fade1_light'])                                           
                     if 'fade2_light' in jk: fade2Light=60*float(j['fade2_light'])
@@ -577,19 +640,24 @@ def getserverupdates():
                     if 'filter' in jk: glb.manualfilter=bool(j['filter'])
                     if 'targ_temp' in jk: glb.targ_temp=float(j['targ_temp'])
                     if 't_offset' in jk: glb.t_offset=float(j['t_offset'])                            
+                    if 'topon_lev' in jk: topHeatOn=float(j['topon_lev'])                            
+                    if 'topoff_lev' in jk: topHeatOff=float(j['topoff_lev'])                            
                     
                     if 'max_vol' in jk:
                         glb.max_vol=float(j['max_vol'])
                         printer.fout('max_vol',str(glb.max_vol))
                         new_max_vol=True
                         
-                    if 'colorthereapymode' in jk: colorthereapymode=bool(j['colorthereapymode'])
+                    if 'acoustictherapymode' in jk: acoustictherapymode=bool(j['acoustictherapymode'])
+                    if 'colortherapymode' in jk: colortherapymode=bool(j['colortherapymode'])
                     if 'lightMode' in jk:                           
                         lightMode=bool(j['lightMode'])
                         if lightMode: setlm(100,quickLight,100,quickLight)
                         else:         setlm(  0,quickLight,  0,quickLight)
+                        
+                    if 'reboot' in jk: os.system('reboot')
                     
-                #except: print('json exception@getserverupdates')
+                except: print('json exception@getserverupdates')
         if fade1Music<60*.1: nomusicfade=True
         else: nomusicfade=False
         #print((fade1Music,60*.1,nomusicfade))
