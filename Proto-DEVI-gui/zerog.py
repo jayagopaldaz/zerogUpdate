@@ -2332,8 +2332,8 @@ while alive:
         ##########################################################################################################################################
         screens_END=mainscreen+2*floatscreen+4*settingsscreen
         if screens_BEGIN!=screens_END and floatscreen or reloaded: drawgradbar()
-        if reloaded: 
         elif wait_to_redrawgradbar: drawgradbar()
+        if reloaded: 
             reloaded=False
         
         first_two_screens=(not settingsscreen and not levelsscreen and not customscreen)
